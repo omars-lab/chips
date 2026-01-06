@@ -15,8 +15,7 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     # Enable modules for C dependencies (cmark-gfm needs this)
     CLANG_ENABLE_MODULES: YES
-    # Fix for cmark-gfm module compatibility with Xcode 15+
-    OTHER_CFLAGS: "$(inherited) -fmodule-map-file-home-is-cwd"
+    # Fix for cmark-gfm module compatibility with Xcode 15+ (macOS only)
     GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) _DARWIN_C_SOURCE=1"
   configs:
     Debug:
@@ -39,6 +38,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.chips.app
         INFOPLIST_FILE: Chips/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_NAME: Chips
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -46,6 +46,11 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Chips/Resources/Chips.entitlements
         DEVELOPMENT_TEAM: ""
         TARGETED_DEVICE_FAMILY: "1,2"
+        # Fix for cmark-gfm building for iOS Simulator
+        ONLY_ACTIVE_ARCH: YES
+        SUPPORTED_PLATFORMS: "iphonesimulator iphoneos"
+        # Prevent macOS SDK from being used when building for iOS
+        SUPPORTS_MACCATALYST: NO
       configs:
         Debug:
           CODE_SIGN_IDENTITY: "Apple Development"
@@ -72,17 +77,25 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.chips.app
         INFOPLIST_FILE: Chips/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_NAME: Chips
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Chips/Resources/Chips.entitlements
-        DEVELOPMENT_TEAM: ""
+        # Allow building without a development team for local development
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        # Fix for cmark-gfm module compatibility with Xcode 15+ (macOS only)
+        OTHER_CFLAGS: "$(inherited) -fmodule-map-file-home-is-cwd"
       configs:
         Debug:
-          CODE_SIGN_IDENTITY: "Apple Development"
+          CODE_SIGN_IDENTITY: "-"
         Release:
           CODE_SIGN_IDENTITY: "Apple Distribution"
+          CODE_SIGNING_REQUIRED: YES
+          CODE_SIGNING_ALLOWED: YES
     dependencies:
       - package: swift-markdown
         product: Markdown
@@ -174,7 +187,7 @@ packages:
     from: "0.7.3"
   Yams:
     url: https://github.com/jpsim/Yams
-    from: "6.2.0"
+    exactVersion: "6.0.2"
 
 schemes:
   Chips-iOS:

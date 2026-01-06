@@ -23,6 +23,7 @@ help:
 	@echo "  run-ios        - Build and run on iPhone 15 Simulator"
 	@echo "  run-ipad       - Build and run on iPad Simulator"
 	@echo "  run-mac        - Build and run macOS app"
+	@echo "  run-mac-stdout - Build and run macOS app from terminal (see stdout/stderr)"
 	@echo "  open           - Open project in Xcode"
 	@echo ""
 	@echo "Testing:"
@@ -137,119 +138,56 @@ build-release: generate
 		| xcbeautify
 
 clean:
-	@echo "🧹 Cleaning..."
-	@xcodebuild clean -project $(PROJECT) -scheme $(SCHEME_IOS) 2>/dev/null || true
-	@xcodebuild clean -project $(PROJECT) -scheme $(SCHEME_MACOS) 2>/dev/null || true
-	@rm -rf ~/Library/Developer/Xcode/DerivedData
-	@rm -rf build/
-	@rm -rf $(PROJECT)
-	@echo "✅ Clean complete"
+	@./scripts/clean.sh
 
 # =============================================================================
 # RUNNING (SIMULATOR)
 # =============================================================================
 
 run-ios: generate
-	@echo "📱 Building and running on $(IPHONE_SIMULATOR)..."
-	@DEVICE_ID=$$(xcrun simctl list devices available | grep "$(IPHONE_SIMULATOR)" | head -1 | sed -E 's/.*\(([A-F0-9-]{36})\).*/\1/'); \
-	if [ -z "$$DEVICE_ID" ]; then \
-		echo "❌ Could not find simulator device: $(IPHONE_SIMULATOR)"; \
-		echo "   Available devices:"; \
-		xcrun simctl list devices available | grep "iPhone" | head -5; \
-		exit 1; \
-	fi; \
-	echo "   Using device ID: $$DEVICE_ID"; \
-	xcrun simctl boot "$$DEVICE_ID" 2>/dev/null || true; \
-	open -a Simulator; \
-	echo "🔨 Building app..."; \
-	if ! xcodebuild build \
-		-project $(PROJECT) \
-		-scheme $(SCHEME_IOS) \
-		-configuration Debug \
-		-destination "platform=iOS Simulator,id=$$DEVICE_ID" \
-		| xcbeautify; then \
-		echo "❌ Build failed. Trying without xcbeautify..."; \
-		xcodebuild build \
-			-project $(PROJECT) \
-			-scheme $(SCHEME_IOS) \
-			-configuration Debug \
-			-destination "platform=iOS Simulator,id=$$DEVICE_ID"; \
-	fi; \
-	echo "🚀 Launching app..."; \
-	APP_PATH=$$(find ~/Library/Developer/Xcode/DerivedData -name "Chips.app" -path "*Debug-iphonesimulator*" 2>/dev/null | head -1); \
-	if [ -z "$$APP_PATH" ] || [ ! -d "$$APP_PATH" ]; then \
-		echo "❌ App not found, build may have failed"; \
-		exit 1; \
-	fi; \
-	echo "📦 Installing app from $$APP_PATH..."; \
-	if [ ! -f "$$APP_PATH/Info.plist" ]; then \
-		echo "❌ Error: Info.plist not found in app bundle. Build may have failed."; \
-		echo "   Try: make clean && make generate && make run-ios"; \
-		exit 1; \
-	fi; \
-	BUNDLE_ID_CHECK=$$(plutil -extract CFBundleIdentifier raw "$$APP_PATH/Info.plist" 2>/dev/null); \
-	if [ -z "$$BUNDLE_ID_CHECK" ]; then \
-		echo "❌ Error: Bundle ID not found in Info.plist."; \
-		echo "   Try: make clean && make generate && make run-ios"; \
-		exit 1; \
-	fi; \
-	echo "   Bundle ID: $$BUNDLE_ID_CHECK"; \
-	xcrun simctl install booted "$$APP_PATH" && \
-	xcrun simctl launch booted $(BUNDLE_ID) || echo "Launch failed - try opening from Xcode"
+	echo "💻 Building iOS app... with $(IPHONE_SIMULATOR)"
+	@./scripts/run-ios.sh "$(IPHONE_SIMULATOR)"
 
 run-ipad: generate
-	@echo "📱 Building and running on $(IPAD_SIMULATOR)..."
-	@DEVICE_ID=$$(xcrun simctl list devices available | grep "$(IPAD_SIMULATOR)" | head -1 | sed -E 's/.*\(([A-F0-9-]{36})\).*/\1/'); \
-	if [ -z "$$DEVICE_ID" ]; then \
-		echo "❌ Could not find simulator device: $(IPAD_SIMULATOR)"; \
-		echo "   Available devices:"; \
-		xcrun simctl list devices available | grep "iPad" | head -5; \
-		exit 1; \
-	fi; \
-	echo "   Using device ID: $$DEVICE_ID"; \
-	xcrun simctl boot "$$DEVICE_ID" 2>/dev/null || true; \
-	open -a Simulator; \
-	echo "🔨 Building app..."; \
-	if ! xcodebuild build \
+	@./scripts/run-ipad.sh "$(IPAD_SIMULATOR)"
+
+run-mac: generate
+	@./scripts/run-mac.sh
+
+run-mac-stdout: generate
+	@echo "💻 Building macOS app..."
+	@set +e; \
+	xcodebuild build \
 		-project $(PROJECT) \
-		-scheme $(SCHEME_IOS) \
+		-scheme $(SCHEME_MACOS) \
 		-configuration Debug \
-		-destination "platform=iOS Simulator,id=$$DEVICE_ID" \
-		| xcbeautify; then \
-		echo "❌ Build failed. Trying without xcbeautify..."; \
-		xcodebuild build \
-			-project $(PROJECT) \
-			-scheme $(SCHEME_IOS) \
-			-configuration Debug \
-			-destination "platform=iOS Simulator,id=$$DEVICE_ID"; \
+		-destination 'platform=macOS' \
+		2>&1 | xcbeautify; \
+	BUILD_EXIT=$$?; \
+	set -e; \
+	if [ $$BUILD_EXIT -ne 0 ]; then \
+		echo "❌ Build failed with exit code $$BUILD_EXIT"; \
+		exit $$BUILD_EXIT; \
 	fi; \
-	echo "🚀 Launching app..."; \
-	APP_PATH=$$(find ~/Library/Developer/Xcode/DerivedData -name "Chips.app" -path "*Debug-iphonesimulator*" 2>/dev/null | head -1); \
+	echo ""; \
+	echo "🚀 Running app from terminal (stdout/stderr visible)..."; \
+	APP_PATH=$$(find ~/Library/Developer/Xcode/DerivedData -name "Chips.app" -path "*Debug/*" -not -path "*iphonesimulator*" 2>/dev/null | head -1); \
 	if [ -z "$$APP_PATH" ] || [ ! -d "$$APP_PATH" ]; then \
 		echo "❌ App not found, build may have failed"; \
 		exit 1; \
 	fi; \
-	echo "📦 Installing app from $$APP_PATH..."; \
-	if [ ! -f "$$APP_PATH/Info.plist" ]; then \
-		echo "❌ Error: Info.plist not found in app bundle. Build may have failed."; \
-		echo "   Try: make clean && make generate && make run-ipad"; \
-		exit 1; \
-	fi; \
-	BUNDLE_ID_CHECK=$$(plutil -extract CFBundleIdentifier raw "$$APP_PATH/Info.plist" 2>/dev/null); \
-	if [ -z "$$BUNDLE_ID_CHECK" ]; then \
-		echo "❌ Error: Bundle ID not found in Info.plist."; \
-		echo "   Try: make clean && make generate && make run-ipad"; \
-		exit 1; \
-	fi; \
-	echo "   Bundle ID: $$BUNDLE_ID_CHECK"; \
-	xcrun simctl install booted "$$APP_PATH" && \
-	xcrun simctl launch booted $(BUNDLE_ID) || echo "Launch failed - try opening from Xcode"
+	echo "   App path: $$APP_PATH"; \
+	echo ""; \
+	echo "📋 App output (Ctrl+C to stop):"; \
+	echo ""; \
+	"$$APP_PATH/Contents/MacOS/Chips"
 
-run-mac: generate
-	@echo "💻 Building and running on macOS..."
-	xcodebuild build -project $(PROJECT) -scheme $(SCHEME_MACOS) -destination 'platform=macOS' | xcbeautify || xcodebuild build -project $(PROJECT) -scheme $(SCHEME_MACOS) -destination 'platform=macOS'
-	@echo "🚀 Launching app..."
-	@open $$(find ~/Library/Developer/Xcode/DerivedData -name "Chips.app" -path "*Debug/*" -not -path "*iphonesimulator*" 2>/dev/null | head -1) || echo "App not found, open Xcode to build"
+tail-mac-logs:
+	@echo "📋 Streaming Chips app logs (Ctrl+C to stop)..."
+	@log stream --predicate 'process == "Chips"' --level debug
+
+view-logs:
+	@./scripts/view-logs.sh
 
 open: generate
 	@open $(PROJECT)
@@ -416,57 +354,7 @@ watch:
 # =============================================================================
 
 check-packages: generate
-	@echo "📦 Checking for Swift package updates..."
-	@echo ""
-	@RESOLVED=$$(xcodebuild -resolvePackageDependencies -project $(PROJECT) -scheme $(SCHEME_IOS) 2>&1 | grep -A 10 "Resolved source packages" | grep "@" | sed 's/.*@ //'); \
-	echo "Current versions:"; \
-	echo "$$RESOLVED"; \
-	echo ""; \
-	echo "Checking latest versions on GitHub..."; \
-	echo ""; \
-	SWIFT_MARKDOWN_LATEST=$$(git ls-remote --tags https://github.com/apple/swift-markdown.git 2>/dev/null | grep -E 'refs/tags/[0-9]' | tail -1 | sed 's/.*refs\/tags\///'); \
-	YAMS_LATEST=$$(git ls-remote --tags https://github.com/jpsim/Yams.git 2>/dev/null | grep -E 'refs/tags/[0-9]' | tail -1 | sed 's/.*refs\/tags\///'); \
-	CMARK_LATEST=$$(git ls-remote --tags https://github.com/swiftlang/swift-cmark.git 2>/dev/null | grep -E 'refs/tags/[0-9]' | tail -1 | sed 's/.*refs\/tags\///'); \
-	SWIFT_MARKDOWN_CURRENT=$$(grep -A 2 "swift-markdown:" project.yml | grep "from:" | sed 's/.*"\(.*\)"/\1/'); \
-	YAMS_CURRENT=$$(grep -A 2 "^  Yams:" project.yml | grep "from:" | sed 's/.*"\(.*\)"/\1/'); \
-	echo "Package Version Comparison:"; \
-	echo "  swift-markdown:  $$SWIFT_MARKDOWN_CURRENT → $$SWIFT_MARKDOWN_LATEST"; \
-	echo "  Yams:            $$YAMS_CURRENT → $$YAMS_LATEST"; \
-	echo "  cmark-gfm:       (dependency, latest: $$CMARK_LATEST)"; \
-	echo ""; \
-	if [ "$$SWIFT_MARKDOWN_CURRENT" != "$$SWIFT_MARKDOWN_LATEST" ] || [ "$$YAMS_CURRENT" != "$$YAMS_LATEST" ]; then \
-		echo "⚠️  Updates available! Run 'make update-packages' to update."; \
-	else \
-		echo "✅ All packages are up to date!"; \
-	fi
+	@./scripts/check-packages.sh
 
 update-packages: generate
-	@echo "🔄 Updating Swift packages to latest versions..."
-	@echo ""
-	@SWIFT_MARKDOWN_LATEST=$$(git ls-remote --tags https://github.com/apple/swift-markdown.git 2>/dev/null | grep -E 'refs/tags/[0-9]' | tail -1 | sed 's/.*refs\/tags\///'); \
-	YAMS_LATEST=$$(git ls-remote --tags https://github.com/jpsim/Yams.git 2>/dev/null | grep -E 'refs/tags/[0-9]' | tail -1 | sed 's/.*refs\/tags\///'); \
-	SWIFT_MARKDOWN_CURRENT=$$(grep -A 2 "swift-markdown:" project.yml | grep "from:" | sed 's/.*"\(.*\)"/\1/'); \
-	YAMS_CURRENT=$$(grep -A 2 "^  Yams:" project.yml | grep "from:" | sed 's/.*"\(.*\)"/\1/'); \
-	if [ -z "$$SWIFT_MARKDOWN_LATEST" ] || [ -z "$$YAMS_LATEST" ]; then \
-		echo "❌ Error: Could not fetch latest versions. Check your internet connection."; \
-		exit 1; \
-	fi; \
-	echo "Updating packages:"; \
-	if [ "$$SWIFT_MARKDOWN_CURRENT" != "$$SWIFT_MARKDOWN_LATEST" ]; then \
-		echo "  swift-markdown: $$SWIFT_MARKDOWN_CURRENT → $$SWIFT_MARKDOWN_LATEST"; \
-		sed -i '' "s/from: \"$$SWIFT_MARKDOWN_CURRENT\"/from: \"$$SWIFT_MARKDOWN_LATEST\"/" project.yml; \
-	else \
-		echo "  swift-markdown: $$SWIFT_MARKDOWN_CURRENT (already latest)"; \
-	fi; \
-	if [ "$$YAMS_CURRENT" != "$$YAMS_LATEST" ]; then \
-		echo "  Yams: $$YAMS_CURRENT → $$YAMS_LATEST"; \
-		sed -i '' "s/from: \"$$YAMS_CURRENT\"/from: \"$$YAMS_LATEST\"/" project.yml; \
-	else \
-		echo "  Yams: $$YAMS_CURRENT (already latest)"; \
-	fi; \
-	echo ""; \
-	echo "✅ Updated project.yml"; \
-	echo "🔄 Regenerating Xcode project..."; \
-	make generate; \
-	echo ""; \
-	echo "✅ Package update complete! Run 'make check-packages' to verify."
+	@./scripts/update-packages.sh

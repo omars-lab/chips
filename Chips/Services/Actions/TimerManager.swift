@@ -16,7 +16,9 @@ final class TimerManager: ObservableObject {
     @Published var activeTimer: ManagedTimer?
     @Published var isTimerViewExpanded: Bool = false
 
+    #if os(iOS)
     private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    #endif
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -27,7 +29,7 @@ final class TimerManager: ObservableObject {
 
     func startTimer(chipID: UUID, chipTitle: String, expectedDuration: TimeInterval?) {
         // Stop any existing timer
-        stopTimer()
+        _ = stopTimer()
 
         activeTimer = ManagedTimer(
             chipID: chipID,

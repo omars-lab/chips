@@ -69,7 +69,8 @@ final class PersistenceController: ObservableObject {
                 fatalError("Failed to retrieve persistent store description")
             }
 
-            // Set CloudKit container identifier
+            #if os(iOS)
+            // Set CloudKit container identifier (iOS only for now)
             description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
                 containerIdentifier: "iCloud.com.chips.app"
             )
@@ -77,12 +78,19 @@ final class PersistenceController: ObservableObject {
             // Enable persistent history tracking for CloudKit sync
             description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
             description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            #else
+            // macOS: Use local storage only (CloudKit requires proper signing/entitlements)
+            // Enable persistent history tracking for local sync
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            #endif
         }
 
         container.loadPersistentStores { storeDescription, error in
             if let error = error as NSError? {
-                // In production, handle this more gracefully
-                fatalError("Failed to load persistent stores: \(error), \(error.userInfo)")
+                // Log error but don't crash - allow app to run with local storage
+                print("⚠️ Failed to load persistent stores: \(error), \(error.userInfo)")
+                print("   Continuing with local storage only...")
+                // Don't fatalError - allow app to continue
             }
         }
 

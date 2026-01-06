@@ -175,12 +175,92 @@ enum CoreDataModel {
         chipToInteractions.inverseRelationship = interactionToChip
         interactionToChip.inverseRelationship = chipToInteractions
 
+        // ChipActionConfiguration Entity
+        let configEntity = NSEntityDescription()
+        configEntity.name = "ChipActionConfiguration"
+        configEntity.managedObjectClassName = "ChipActionConfiguration"
+
+        let configId = NSAttributeDescription()
+        configId.name = "id"
+        configId.attributeType = .UUIDAttributeType
+        configId.isOptional = true
+
+        let configTitle = NSAttributeDescription()
+        configTitle.name = "title"
+        configTitle.attributeType = .stringAttributeType
+        configTitle.isOptional = false
+
+        let configSummary = NSAttributeDescription()
+        configSummary.name = "summary"
+        configSummary.attributeType = .stringAttributeType
+        configSummary.isOptional = true
+
+        let configDescription = NSAttributeDescription()
+        configDescription.name = "configDescription"
+        configDescription.attributeType = .stringAttributeType
+        configDescription.isOptional = true
+
+        let urlPattern = NSAttributeDescription()
+        urlPattern.name = "urlPattern"
+        urlPattern.attributeType = .stringAttributeType
+        urlPattern.isOptional = true
+
+        let configActionType = NSAttributeDescription()
+        configActionType.name = "actionType"
+        configActionType.attributeType = .stringAttributeType
+        configActionType.isOptional = false
+        configActionType.defaultValue = "url"
+
+        let configActionURL = NSAttributeDescription()
+        configActionURL.name = "actionURL"
+        configActionURL.attributeType = .stringAttributeType
+        configActionURL.isOptional = true
+
+        let configXCallbackScheme = NSAttributeDescription()
+        configXCallbackScheme.name = "xCallbackScheme"
+        configXCallbackScheme.attributeType = .stringAttributeType
+        configXCallbackScheme.isOptional = true
+
+        let configXCallbackPath = NSAttributeDescription()
+        configXCallbackPath.name = "xCallbackPath"
+        configXCallbackPath.attributeType = .stringAttributeType
+        configXCallbackPath.isOptional = true
+
+        let configXCallbackParams = NSAttributeDescription()
+        configXCallbackParams.name = "xCallbackParams"
+        configXCallbackParams.attributeType = .stringAttributeType
+        configXCallbackParams.isOptional = true
+
+        let configTags = NSAttributeDescription()
+        configTags.name = "tags"
+        configTags.attributeType = .stringAttributeType
+        configTags.isOptional = true
+
+        let configIsEnabled = NSAttributeDescription()
+        configIsEnabled.name = "isEnabled"
+        configIsEnabled.attributeType = .booleanAttributeType
+        configIsEnabled.isOptional = false
+        configIsEnabled.defaultValue = true
+
+        let configPriority = NSAttributeDescription()
+        configPriority.name = "priority"
+        configPriority.attributeType = .integer32AttributeType
+        configPriority.isOptional = false
+        configPriority.defaultValue = 0
+
+        let configCreatedAt = NSAttributeDescription()
+        configCreatedAt.name = "createdAt"
+        configCreatedAt.attributeType = .dateAttributeType
+        configCreatedAt.isOptional = true
+
+        configEntity.properties = [configId, configTitle, configSummary, configDescription, urlPattern, configActionType, configActionURL, configXCallbackScheme, configXCallbackPath, configXCallbackParams, configTags, configIsEnabled, configPriority, configCreatedAt]
+
         // Add relationships to entities
         chipSourceEntity.properties.append(sourceToChips)
         chipEntity.properties.append(contentsOf: [chipToSource, chipToInteractions])
         interactionEntity.properties.append(interactionToChip)
 
-        model.entities = [chipSourceEntity, chipEntity, interactionEntity]
+        model.entities = [chipSourceEntity, chipEntity, interactionEntity, configEntity]
 
         return model
     }

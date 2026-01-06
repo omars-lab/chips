@@ -32,12 +32,22 @@ struct SettingsTabView: View {
                 }
 
                 // Actions Section
-                Section("Actions") {
+                Section {
+                    NavigationLink {
+                        ChipActionConfigView()
+                    } label: {
+                        Label("Action Configurations", systemImage: "gearshape.2")
+                    }
+                    
                     Picker("Default App for URLs", selection: $defaultApp) {
                         Text("Safari").tag("safari")
                         Text("YouTube").tag("youtube")
                         Text("In-App Browser").tag("inapp")
                     }
+                } header: {
+                    Text("Actions")
+                } footer: {
+                    Text("Configure custom actions for chips based on URL patterns or tags.")
                 }
 
                 // Sync Section

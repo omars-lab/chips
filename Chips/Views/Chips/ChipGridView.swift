@@ -129,7 +129,11 @@ struct ChipCardView: View {
             )
             .shadow(color: .black.opacity(isHovered ? 0.1 : 0.05), radius: isHovered ? 8 : 4, y: 2)
         }
+        #if os(macOS)
+        .buttonStyle(.borderless)
+        #else
         .buttonStyle(.plain)
+        #endif
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering

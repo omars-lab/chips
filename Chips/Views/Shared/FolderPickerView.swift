@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 /// A view that presents a folder picker for selecting markdown source folders
 struct FolderPickerView: View {
@@ -79,7 +82,11 @@ struct FolderPickerView: View {
                 VStack(spacing: 12) {
                     if selectedURL == nil {
                         Button {
+                            #if os(macOS)
+                            showMacOSFolderPicker()
+                            #else
                             isPickerPresented = true
+                            #endif
                         } label: {
                             Label("Choose Folder", systemImage: "folder")
                                 .frame(maxWidth: .infinity)
@@ -107,7 +114,9 @@ struct FolderPickerView: View {
                 .padding(.bottom, 32)
             }
             .navigationTitle("Add Source")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -115,6 +124,7 @@ struct FolderPickerView: View {
                     }
                 }
             }
+            #if os(iOS)
             .fileImporter(
                 isPresented: $isPickerPresented,
                 allowedContentTypes: [.folder],
@@ -122,9 +132,11 @@ struct FolderPickerView: View {
             ) { result in
                 handleFolderSelection(result)
             }
+            #endif
         }
     }
 
+    #if os(iOS)
     private func handleFolderSelection(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
@@ -136,6 +148,26 @@ struct FolderPickerView: View {
             errorMessage = error.localizedDescription
         }
     }
+    #endif
+    
+    #if os(macOS)
+    private func showMacOSFolderPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Select"
+        panel.message = "Choose a folder containing markdown files"
+        
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                selectedURL = url
+                sourceName = url.deletingPathExtension().lastPathComponent
+            }
+        }
+    }
+    #endif
 
     private func addSource() {
         guard let url = selectedURL else { return }
@@ -165,47 +197,6 @@ struct FolderPickerView: View {
     }
 }
 
-// MARK: - macOS Document Picker
-
-#if os(macOS)
-import AppKit
-
-struct DocumentPicker: NSViewRepresentable {
-    @Binding var selectedURL: URL?
-
-    func makeNSView(context: Context) -> NSView {
-        return NSView()
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject {
-        let parent: DocumentPicker
-
-        init(_ parent: DocumentPicker) {
-            self.parent = parent
-        }
-
-        func showPicker() {
-            let panel = NSOpenPanel()
-            panel.canChooseFiles = false
-            panel.canChooseDirectories = true
-            panel.allowsMultipleSelection = false
-            panel.canCreateDirectories = false
-            panel.prompt = "Select"
-            panel.message = "Choose a folder containing markdown files"
-
-            if panel.runModal() == .OK {
-                parent.selectedURL = panel.url
-            }
-        }
-    }
-}
-#endif
 
 // MARK: - Preview
 

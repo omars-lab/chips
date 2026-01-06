@@ -31,21 +31,42 @@ final class MarkdownSourceManager: ObservableObject {
 
     /// Add a new source folder
     func addSource(url: URL, name: String? = nil, context: NSManagedObjectContext) async throws {
-        // Start accessing security-scoped resource
+        // On macOS, NSOpenPanel URLs don't need security-scoped access
+        // On iOS, fileImporter URLs do need it
+        #if os(iOS)
         guard url.startAccessingSecurityScopedResource() else {
             throw SourceManagerError.accessDenied
         }
-
         defer {
             url.stopAccessingSecurityScopedResource()
         }
+        #endif
 
         // Create bookmark for persistent access
+        // Try with security scope first on macOS, fall back to minimal if it fails
+        #if os(macOS)
+        let bookmarkData: Data
+        do {
+            bookmarkData = try url.bookmarkData(
+                options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        } catch {
+            // Fall back to minimal bookmark if security-scoped bookmark fails
+            bookmarkData = try url.bookmarkData(
+                options: .minimalBookmark,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        }
+        #else
         let bookmarkData = try url.bookmarkData(
             options: .minimalBookmark,
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
+        #endif
 
         // Store bookmark in UserDefaults
         var bookmarks = UserDefaults.standard.dictionary(forKey: "sourceBookmarks") as? [String: Data] ?? [:]
@@ -169,12 +190,64 @@ final class MarkdownSourceManager: ObservableObject {
         existingSource: ChipSource? = nil,
         context: NSManagedObjectContext
     ) async throws {
-        // Read file content
-        let content = try String(contentsOf: url, encoding: .utf8)
-        let checksum = content.hashValue.description
-
-        // Parse markdown
-        let result = parser.parse(content)
+        var resourceValues: URLResourceValues
+        do {
+            resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
+        } catch {
+            throw SourceManagerError.fileNotFound
+        }
+        
+        let isDirectory = resourceValues.isDirectory ?? false
+        
+        // If it's a directory, find all markdown files in it
+        let markdownFiles: [URL]
+        if isDirectory {
+            let fileManager = FileManager.default
+            guard let enumerator = fileManager.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                throw SourceManagerError.fileNotFound
+            }
+            
+            markdownFiles = enumerator.compactMap { item -> URL? in
+                guard let fileURL = item as? URL,
+                      let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey]),
+                      resourceValues.isRegularFile == true,
+                      fileURL.pathExtension.lowercased() == "md" else {
+                    return nil
+                }
+                return fileURL
+            }
+            
+            guard !markdownFiles.isEmpty else {
+                throw SourceManagerError.fileNotFound
+            }
+        } else {
+            // Single file
+            markdownFiles = [url]
+        }
+        
+        // Parse all markdown files and combine results
+        var allChips: [MarkdownParser.ParsedChip] = []
+        var frontmatter: Frontmatter? = nil
+        var combinedContent = ""
+        var combinedChecksum = ""
+        
+        for fileURL in markdownFiles {
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            combinedContent += content + "\n\n"
+            combinedChecksum += content.hashValue.description + "|"
+            
+            let result = parser.parse(content)
+            if frontmatter == nil {
+                frontmatter = result.frontmatter
+            }
+            allChips.append(contentsOf: result.chips)
+        }
+        
+        let checksum = combinedChecksum.hashValue.description
 
         // Create or update source
         let source = existingSource ?? ChipSource(context: context)
@@ -183,10 +256,17 @@ final class MarkdownSourceManager: ObservableObject {
             source.id = UUID()
         }
 
-        source.name = name ?? result.frontmatter?.title ?? url.deletingPathExtension().lastPathComponent
+        source.name = name ?? frontmatter?.title ?? url.deletingPathExtension().lastPathComponent
         source.iCloudPath = url.path
         source.lastParsed = Date()
         source.checksum = checksum
+        
+        // Create a combined parse result
+        let result = MarkdownParser.ParseResult(
+            frontmatter: frontmatter,
+            chips: allChips,
+            rawContent: combinedContent
+        )
 
         // Get existing chips for matching
         let existingChips = source.chipsArray
@@ -260,6 +340,33 @@ final class MarkdownSourceManager: ObservableObject {
         }
 
         var isStale = false
+        #if os(macOS)
+        // On macOS, try resolving with security scope first
+        var url: URL?
+        do {
+            url = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            // Try to start accessing security-scoped resource
+            if let resolvedURL = url, resolvedURL.startAccessingSecurityScopedResource() {
+                return resolvedURL
+            }
+        } catch {
+            // Fall back to resolving without security scope
+        }
+        
+        // Fall back to resolving without security scope
+        url = try? URL(
+            resolvingBookmarkData: bookmarkData,
+            options: [],
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        return url
+        #else
         guard let url = try? URL(
             resolvingBookmarkData: bookmarkData,
             options: [],
@@ -268,8 +375,8 @@ final class MarkdownSourceManager: ObservableObject {
         ) else {
             return nil
         }
-
         return url
+        #endif
     }
 }
 

@@ -1,4 +1,8 @@
 import SwiftUI
+import os.log
+#if os(macOS)
+import AppKit
+#endif
 
 struct ChipRowView: View {
     @ObservedObject var chip: Chip
@@ -14,69 +18,24 @@ struct ChipRowView: View {
     }
 
     var body: some View {
-        Button {
+        #if os(macOS)
+        Button(action: {
+            let logger = Logger(subsystem: "com.chips.app", category: "ChipRowView")
+            print("🖱️ [ChipRowView] Chip button tapped: \(chip.unwrappedTitle)")
+            logger.info("🖱️ Chip button tapped: \(chip.unwrappedTitle, privacy: .public)")
             executeAction()
-        } label: {
-            HStack(spacing: 12) {
-                // Action indicator
-                actionIcon
-                    .font(.title2)
-                    .frame(width: 32)
-
-                // Content
-                VStack(alignment: .leading, spacing: 4) {
-                    // Title with strikethrough if completed
-                    Text(chip.unwrappedTitle)
-                        .font(.headline)
-                        .strikethrough(chip.isCompleted)
-                        .foregroundStyle(chip.isCompleted ? .secondary : .primary)
-
-                    // Tags
-                    if !chip.tags.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(chip.tags.prefix(3), id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-
-                Spacer()
-
-                // Timer or interaction count
-                if isActiveTimer, let timer = timerManager.activeTimer {
-                    // Active timer indicator
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(timer.isRunning ? Color.green : Color.orange)
-                            .frame(width: 6, height: 6)
-                        Text(timer.formattedElapsed)
-                            .font(.system(.caption, design: .monospaced))
-                    }
-                    .foregroundStyle(timer.isOvertime ? .red : .primary)
-                } else if chip.interactionCount > 0 {
-                    HStack(spacing: 2) {
-                        Image(systemName: "clock")
-                        Text("\(chip.interactionCount)x")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 4)
+        }) {
+            chipContent
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isActiveTimer ? Color.accentColor.opacity(0.1) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isActiveTimer ? Color.accentColor : Color.clear, lineWidth: 2)
+                )
         }
         .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveTimer ? Color.accentColor.opacity(0.1) : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveTimer ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
         .swipeActions(edge: .trailing) {
             Button {
                 toggleCompleted()
@@ -122,6 +81,138 @@ struct ChipRowView: View {
         }
         .sheet(isPresented: $showingHistory) {
             ChipHistoryView(chip: chip)
+        }
+        #else
+        chipContent
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isActiveTimer ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isActiveTimer ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .swipeActions(edge: .trailing) {
+                Button {
+                    toggleCompleted()
+                } label: {
+                    Label(
+                        chip.isCompleted ? "Uncomplete" : "Complete",
+                        systemImage: chip.isCompleted ? "arrow.uturn.backward" : "checkmark"
+                    )
+                }
+                .tint(chip.isCompleted ? .orange : .green)
+            }
+            .swipeActions(edge: .leading) {
+                Button {
+                    showingHistory = true
+                } label: {
+                    Label("History", systemImage: "clock")
+                }
+                .tint(.blue)
+            }
+            .contextMenu {
+                Button {
+                    executeAction()
+                } label: {
+                    Label("Open", systemImage: "arrow.up.right")
+                }
+
+                Button {
+                    showingHistory = true
+                } label: {
+                    Label("View History", systemImage: "clock")
+                }
+
+                Divider()
+
+                Button {
+                    toggleCompleted()
+                } label: {
+                    Label(
+                        chip.isCompleted ? "Mark as Active" : "Mark as Complete",
+                        systemImage: chip.isCompleted ? "arrow.uturn.backward" : "checkmark"
+                    )
+                }
+            }
+            .sheet(isPresented: $showingHistory) {
+                ChipHistoryView(chip: chip)
+            }
+        #endif
+    }
+    
+    @ViewBuilder
+    private var chipContent: some View {
+        #if os(macOS)
+        HStack(spacing: 12) {
+            chipInnerContent
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        #else
+        Button(action: {
+            executeAction()
+        }) {
+            HStack(spacing: 12) {
+                chipInnerContent
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+        }
+        .buttonStyle(.plain)
+        #endif
+    }
+    
+    private var chipInnerContent: some View {
+        Group {
+            // Action indicator
+            actionIcon
+                .font(.title2)
+                .frame(width: 32)
+
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                // Title with strikethrough if completed
+                Text(chip.unwrappedTitle)
+                    .font(.headline)
+                    .strikethrough(chip.isCompleted)
+                    .foregroundStyle(chip.isCompleted ? .secondary : .primary)
+
+                // Tags
+                if !chip.tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(chip.tags.prefix(3), id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Timer or interaction count
+            if isActiveTimer, let timer = timerManager.activeTimer {
+                // Active timer indicator
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(timer.isRunning ? Color.green : Color.orange)
+                        .frame(width: 6, height: 6)
+                    Text(timer.formattedElapsed)
+                        .font(.system(.caption, design: .monospaced))
+                }
+                .foregroundStyle(timer.isOvertime ? .red : .primary)
+            } else if chip.interactionCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "clock")
+                    Text("\(chip.interactionCount)x")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -231,7 +322,9 @@ struct ChipHistoryView: View {
                 }
             }
             .navigationTitle(chip.unwrappedTitle)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {

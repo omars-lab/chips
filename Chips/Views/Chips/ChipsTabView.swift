@@ -175,7 +175,9 @@ struct InboxImportView: View {
                 }
             }
             .navigationTitle("Import Shared Items")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -296,7 +298,11 @@ struct ChipListView: View {
                     }
                 }
             }
+            #if os(iOS)
             .listStyle(.insetGrouped)
+            #else
+            .listStyle(.sidebar)
+            #endif
         }
     }
 }
