@@ -80,20 +80,61 @@ final class ActionEngine: ObservableObject {
     
     private func executeConfiguredAction(config: ChipActionConfiguration, chip: Chip, context: NSManagedObjectContext) {
         let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-        
+
         // Log interaction
         logInteraction(chip: chip, action: "opened_config_\(config.title)", context: context)
-        
-        // Build and open action URL
-        if let actionURL = ChipActionConfigurationManager.shared.buildActionURL(from: config, chip: chip) {
-            logger.info("🔗 Opening configured URL: \(actionURL.absoluteString, privacy: .public)")
-            openURL(actionURL)
-        } else {
-            logger.warning("⚠️ Failed to build action URL from configuration")
-            // Fallback to chip's original URL
+
+        // Build all action URLs
+        let actionURLs = ChipActionConfigurationManager.shared.buildActionURLs(from: config, chip: chip)
+
+        if actionURLs.isEmpty {
+            logger.warning("⚠️ No actions configured, falling back to original URL")
             if let urlString = chip.actionData?.url, let url = URL(string: urlString) {
                 openURL(url)
             }
+            return
+        }
+
+        logger.info("🎬 Executing \(actionURLs.count) action(s) for config: \(config.title, privacy: .public)")
+
+        // Execute actions in sequence with delays
+        executeActionsSequentially(actionURLs, index: 0)
+    }
+
+    private func executeActionsSequentially(_ actions: [(action: ChipActionItem, url: URL?)], index: Int) {
+        guard index < actions.count else { return }
+
+        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
+        let (action, url) = actions[index]
+
+        // Apply delay if specified
+        let delay = action.delay ?? 0
+
+        let executeAction = { [weak self] in
+            guard let self = self else { return }
+
+            if let url = url {
+                logger.info("  [\(index + 1)/\(actions.count)] \(action.name, privacy: .public): \(url.absoluteString, privacy: .public)")
+                self.openURL(url)
+            } else {
+                logger.warning("  [\(index + 1)/\(actions.count)] \(action.name, privacy: .public): No URL")
+            }
+
+            // Execute next action
+            if index + 1 < actions.count {
+                // Small delay between actions to prevent overwhelming the system
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.executeActionsSequentially(actions, index: index + 1)
+                }
+            }
+        }
+
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { @MainActor in
+                executeAction()
+            }
+        } else {
+            executeAction()
         }
     }
 

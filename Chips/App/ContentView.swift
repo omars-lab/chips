@@ -52,6 +52,17 @@ struct SidebarNavigation: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
+                // App Logo Header
+                HStack {
+                    Spacer()
+                    PressableChipLogoView(size: 60, style: .appIcon) {
+                        selectedTab = .chips
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+                .listRowSeparator(.hidden)
+                
                 NavigationLink(value: AppTab.chips) {
                     Label("Chips", systemImage: "square.grid.2x2")
                 }

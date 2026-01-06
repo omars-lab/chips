@@ -47,6 +47,7 @@ help:
 	@echo "Utilities:"
 	@echo "  docs           - Generate documentation"
 	@echo "  screenshots    - Generate App Store screenshots"
+	@echo "  logo           - Generate app icons and in-app logo assets"
 	@echo "  loc            - Count lines of code"
 	@echo "  simulators     - List available simulators"
 	@echo ""
@@ -325,6 +326,9 @@ screenshots: generate
 		-only-testing:ChipsUITests-iOS/ScreenshotTests \
 		| xcbeautify
 	@echo "✅ Screenshots saved to Screenshots/"
+
+logo:
+	@./scripts/generate-logo.sh
 
 loc:
 	@echo "📊 Lines of code:"

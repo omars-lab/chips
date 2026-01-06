@@ -253,7 +253,13 @@ enum CoreDataModel {
         configCreatedAt.attributeType = .dateAttributeType
         configCreatedAt.isOptional = true
 
-        configEntity.properties = [configId, configTitle, configSummary, configDescription, urlPattern, configActionType, configActionURL, configXCallbackScheme, configXCallbackPath, configXCallbackParams, configTags, configIsEnabled, configPriority, configCreatedAt]
+        // Actions array (JSON) - stores multiple actions to execute
+        let configActions = NSAttributeDescription()
+        configActions.name = "actionsJSON"
+        configActions.attributeType = .stringAttributeType
+        configActions.isOptional = true
+
+        configEntity.properties = [configId, configTitle, configSummary, configDescription, urlPattern, configActionType, configActionURL, configXCallbackScheme, configXCallbackPath, configXCallbackParams, configTags, configIsEnabled, configPriority, configCreatedAt, configActions]
 
         // Add relationships to entities
         chipSourceEntity.properties.append(sourceToChips)
