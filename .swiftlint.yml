@@ -1,0 +1,70 @@
+# SwiftLint Configuration for Chips
+
+excluded:
+  - build
+  - .build
+  - Pods
+  - DerivedData
+  - "*.generated.swift"
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - force_cast
+  - force_try
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - closure_spacing
+  - contains_over_first_not_nil
+  - discouraged_object_literal
+  - explicit_init
+  - first_where
+  - modifier_order
+  - overridden_super_call
+  - private_action
+  - private_outlet
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+  - yoda_condition
+
+# Rule configurations
+identifier_name:
+  min_length: 1
+  max_length: 60
+  excluded:
+    - id
+    - i
+    - x
+    - y
+    - z
+
+type_name:
+  min_length: 2
+  max_length: 50
+
+file_length:
+  warning: 500
+  error: 1000
+
+function_body_length:
+  warning: 60
+  error: 100
+
+type_body_length:
+  warning: 400
+  error: 600
+
+nesting:
+  type_level: 3
+  function_level: 3
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+reporter: "xcode"

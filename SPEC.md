@@ -268,7 +268,7 @@ class MarkdownSourceManager {
 
 ## 5. Implementation Plan
 
-### Phase 1: Foundation (Week 1-2)
+### Phase 1: Foundation
 1. **Project Setup**
    - Create Xcode project (SwiftUI, multiplatform)
    - Configure CloudKit container
@@ -280,7 +280,7 @@ class MarkdownSourceManager {
    - Create CloudKit schema
    - Build repository layer
 
-### Phase 2: Markdown Engine (Week 3-4)
+### Phase 2: Markdown Engine
 3. **Parser Development**
    - Integrate markdown parsing library (swift-markdown or custom)
    - Implement frontmatter parsing
@@ -293,7 +293,7 @@ class MarkdownSourceManager {
    - Change detection and re-parsing
    - Chip ID preservation logic
 
-### Phase 3: Core UI (Week 5-6)
+### Phase 3: Core UI
 5. **Chip Components**
    - Design chip view component
    - Implement all visual states
@@ -306,7 +306,7 @@ class MarkdownSourceManager {
    - Filter and sort controls
    - Platform-specific layouts
 
-### Phase 4: Actions & Tracking (Week 7-8)
+### Phase 4: Actions & Tracking
 7. **Action Engine**
    - URL action with app routing
    - Timer action with background support
@@ -319,7 +319,7 @@ class MarkdownSourceManager {
    - Statistics calculations
    - Search implementation
 
-### Phase 5: Polish & Sync (Week 9-10)
+### Phase 5: Polish & Sync
 9. **CloudKit Sync**
    - Test cross-device sync
    - Conflict resolution
@@ -820,7 +820,31 @@ cloudkit-export:
 
 ---
 
-## 12. Open Questions / Future Considerations
+## 12. Share Extension
+
+### 12.1 Overview
+Allow users to share URLs, text, and other content from any app directly into Chips. The shared content will be added to a designated "Inbox" markdown file that can be organized later.
+
+### 12.2 Supported Content Types
+- **URLs**: Links from Safari, YouTube, etc.
+- **Text**: Plain text selections
+- **Images**: Save reference to image (optional)
+
+### 12.3 User Flow
+1. User taps Share in any app
+2. Selects "Add to Chips"
+3. Optionally adds tags or selects target list
+4. Item is appended to inbox.md in iCloud Drive
+5. Main app syncs and displays new chip
+
+### 12.4 Implementation
+- Share Extension target in Xcode project
+- App Groups for shared data access
+- Background sync to update main app
+
+---
+
+## 13. Open Questions / Future Considerations
 
 1. **Widgets**: Show recent chips or today's activity on home screen?
 2. **Shortcuts**: Siri Shortcuts integration for quick chip access?
@@ -832,7 +856,7 @@ cloudkit-export:
 
 ## Next Steps
 
-1. Approve this spec
+1. ✅ Approve this spec
 2. Create Xcode project with multiplatform target
 3. Set up CloudKit container in Apple Developer portal
 4. Implement Phase 1: Foundation
