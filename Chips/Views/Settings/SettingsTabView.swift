@@ -76,7 +76,7 @@ struct SettingsTabView: View {
                 Section("About") {
                     LabeledContent("Version", value: appVersion)
 
-                    Link(destination: URL(string: "https://github.com/yourname/chips")!) {
+                    Link(destination: URL(string: "https://github.com/omars-lab/chips")!) {
                         Label("GitHub", systemImage: "link")
                     }
                 }

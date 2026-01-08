@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import CoreData
-import os.log
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -20,17 +19,17 @@ final class ActionEngine: ObservableObject {
     // MARK: - Execute Action
 
     func execute(chip: Chip, context: NSManagedObjectContext) {
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-        
-        // Also print to stdout for debugging
-        print("🎯 [ActionEngine] Executing action for chip: \(chip.unwrappedTitle)")
-        logger.info("🎯 Executing action for chip: \(chip.unwrappedTitle, privacy: .public)")
+        AppLogger.info("🎯 Executing action for chip: \(chip.unwrappedTitle)", category: AppConstants.LoggerCategory.actionEngine)
         
         // Check for custom configuration first
         if let config = ChipActionConfigurationManager.shared.findConfiguration(for: chip, context: context) {
-            print("🎯 [ActionEngine] Found configuration: \(config.title)")
-            logger.info("🎯 Found configuration: \(config.title, privacy: .public)")
+            AppLogger.info("🎯 Found configuration: \(config.title)", category: AppConstants.LoggerCategory.actionEngine)
             executeConfiguredAction(config: config, chip: chip, context: context)
+            
+            // Fetch metadata after action (async, non-blocking)
+            Task {
+                await fetchMetadataIfNeeded(for: chip)
+            }
             return
         }
         
@@ -38,49 +37,154 @@ final class ActionEngine: ObservableObject {
         let actionType = chip.actionType ?? "url"
         let actionData = chip.actionData
         
-        print("🎯 [ActionEngine] Action type: \(actionType)")
-        print("🎯 [ActionEngine] Action data URL: \(actionData?.url ?? "nil")")
-        logger.info("   Action type: \(actionType, privacy: .public)")
-        logger.info("   Action data: \(actionData?.url ?? "nil", privacy: .public)")
+        AppLogger.info("   Action type: \(actionType)", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   Action data: \(actionData?.url ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
 
         // Log interaction
         logInteraction(chip: chip, action: "opened_\(actionType)", context: context)
 
         switch actionType {
         case "url":
-            print("🎯 [ActionEngine] Executing URL action")
+            AppLogger.info("🎯 Executing URL action", category: AppConstants.LoggerCategory.actionEngine)
             executeURLAction(actionData: actionData, chip: chip)
         case "timer":
-            print("🎯 [ActionEngine] Executing timer action")
+            AppLogger.info("🎯 Executing timer action", category: AppConstants.LoggerCategory.actionEngine)
             let duration = actionData?.expectedDuration.map { TimeInterval($0) }
             executeTimerAction(chip: chip, expectedDuration: duration)
         case "app":
-            print("🎯 [ActionEngine] Executing app action")
+            AppLogger.info("🎯 Executing app action", category: AppConstants.LoggerCategory.actionEngine)
             executeAppAction(appName: actionData?.preferredApp, fallbackURL: actionData?.url)
         default:
-            print("🎯 [ActionEngine] Executing default action")
+            AppLogger.info("🎯 Executing default action", category: AppConstants.LoggerCategory.actionEngine)
             // Try to extract URL from actionData first
             if let urlString = actionData?.url, let url = URL(string: urlString) {
-                print("🎯 [ActionEngine] Found URL in actionData: \(urlString)")
+                AppLogger.info("🎯 Found URL in actionData: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
                 openURL(url)
             } else {
                 // Fallback: check if the title itself is a URL
-                let title = chip.unwrappedTitle.trimmingCharacters(in: CharacterSet.whitespaces)
-                if let url = URL(string: title), url.scheme != nil {
-                    print("🎯 [ActionEngine] Title is a URL, opening: \(title)")
-                    logger.info("🎯 Title is a URL, opening: \(title, privacy: .public)")
+                if let urlString = chip.unwrappedTitle.extractURL(), let url = URL(string: urlString) {
+                    AppLogger.info("🎯 Title is a URL, opening: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
                     openURL(url)
                 } else {
-                    print("⚠️ [ActionEngine] No URL found for default action")
-                    logger.warning("⚠️ No URL found for default action")
+                    AppLogger.warning("⚠️ No URL found for default action", category: AppConstants.LoggerCategory.actionEngine)
                 }
             }
+        }
+        
+        // Fetch metadata after action (async, non-blocking)
+        Task {
+            await fetchMetadataIfNeeded(for: chip)
+        }
+    }
+    
+    // MARK: - Metadata Fetching
+    
+    private func fetchMetadataIfNeeded(for chip: Chip) async {
+        // Extract URL
+        let urlFromActionData = chip.actionData?.url
+        let urlFromTitle = chip.unwrappedTitle.extractURL()
+        let urlString = urlFromActionData ?? urlFromTitle
+        
+        guard let urlString = urlString, let url = URL(string: urlString) else {
+            AppLogger.debug("❌ [ActionEngine] No URL found - skipping metadata fetch", category: AppConstants.LoggerCategory.actionEngine)
+            return
+        }
+        
+        AppLogger.info("📡 [ActionEngine] Fetching metadata for URL: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
+        
+        let metadata = await URLMetadataFetcher.shared.fetchMetadata(from: url)
+        
+        if let metadata = metadata {
+            AppLogger.info("✅ [ActionEngine] Metadata fetched successfully:", category: AppConstants.LoggerCategory.actionEngine)
+            AppLogger.info("   - Title: \(metadata.title ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+            AppLogger.info("   - Description: \(metadata.description ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+            AppLogger.info("   - Site: \(metadata.siteName ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+            AppLogger.info("   - Type: \(metadata.type ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+            AppLogger.info("   - Image URL: \(metadata.imageURL ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+            
+            // Update chip with metadata and trigger summarization
+            await updateChipWithMetadata(metadata, chip: chip, urlString: urlString)
+        } else {
+            AppLogger.debug("⚠️ [ActionEngine] Metadata fetch returned nil", category: AppConstants.LoggerCategory.actionEngine)
+        }
+    }
+    
+    /// Update chip with metadata and trigger summarization
+    private func updateChipWithMetadata(_ urlMetadata: URLMetadataFetcher.URLMetadata, chip: Chip, urlString: String) async {
+        // Check if this is a YouTube video
+        let isYouTube = urlString.contains("youtube.com") || urlString.contains("youtu.be")
+        
+        // Get current chip metadata or create new
+        var chipMeta = chip.chipMetadata ?? ChipMetadata()
+        
+        // Store all metadata fields
+        chipMeta.metadataTitle = urlMetadata.title
+        chipMeta.metadataDescription = urlMetadata.description
+        chipMeta.metadataImageURL = urlMetadata.imageURL
+        chipMeta.metadataSiteName = urlMetadata.siteName
+        chipMeta.metadataType = urlMetadata.type
+        
+        // If chip title is just the URL and this is YouTube, update chip.title with metadata title
+        // IMPORTANT: Also store URL in actionData so it can still be found after title update
+        if isYouTube, let metadataTitle = urlMetadata.title {
+            let currentTitle = chip.unwrappedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if currentTitle == urlString || currentTitle.extractURL() != nil {
+                chip.title = metadataTitle
+                
+                // Store URL in actionData so it can still be extracted after title update
+                var actionData = chip.actionData ?? ActionPayload()
+                if actionData.url == nil {
+                    actionData.url = urlString
+                    chip.actionData = actionData
+                    AppLogger.info("💾 [ActionEngine] Stored URL in actionData: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
+                }
+                
+                AppLogger.info("📝 [ActionEngine] Updated chip title with metadata: \(metadataTitle)", category: AppConstants.LoggerCategory.actionEngine)
+            }
+        } else {
+            // For non-YouTube URLs, also ensure URL is stored in actionData if title contains URL
+            let currentTitle = chip.unwrappedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if currentTitle == urlString || currentTitle.extractURL() != nil {
+                var actionData = chip.actionData ?? ActionPayload()
+                if actionData.url == nil {
+                    actionData.url = urlString
+                    chip.actionData = actionData
+                    AppLogger.info("💾 [ActionEngine] Stored URL in actionData: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
+                }
+            }
+        }
+        
+        // Store metadata in chip.metadata JSON
+        chip.chipMetadata = chipMeta
+        
+        AppLogger.info("   💾 [ActionEngine] Stored metadata in chip.chipMetadata:", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("      - metadataImageURL: \(chipMeta.metadataImageURL ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("      - metadataTitle: \(chipMeta.metadataTitle ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
+        
+        // Save changes
+        do {
+            try chip.managedObjectContext?.save()
+            AppLogger.info("   ✅ [ActionEngine] Chip saved successfully", category: AppConstants.LoggerCategory.actionEngine)
+            
+            // Verify chip metadata after save
+            if let savedMeta = chip.chipMetadata {
+                AppLogger.info("   🔍 [ActionEngine] Verification - chip.chipMetadata.metadataImageURL: \(savedMeta.metadataImageURL ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
+            }
+        } catch {
+            AppLogger.error("❌ [ActionEngine] Failed to save chip metadata: \(error.localizedDescription)", category: AppConstants.LoggerCategory.actionEngine)
+        }
+        
+        // Trigger summarization after metadata is fetched
+        Task {
+            await ChipSummaryService.shared.generateSummary(
+                for: chip,
+                description: urlMetadata.description,
+                in: chip.managedObjectContext ?? PersistenceController.shared.container.viewContext
+            )
         }
     }
     
     private func executeConfiguredAction(config: ChipActionConfiguration, chip: Chip, context: NSManagedObjectContext) {
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-
         // Log interaction
         logInteraction(chip: chip, action: "opened_config_\(config.title)", context: context)
 
@@ -88,14 +192,14 @@ final class ActionEngine: ObservableObject {
         let actionURLs = ChipActionConfigurationManager.shared.buildActionURLs(from: config, chip: chip)
 
         if actionURLs.isEmpty {
-            logger.warning("⚠️ No actions configured, falling back to original URL")
+            AppLogger.warning("⚠️ No actions configured, falling back to original URL", category: AppConstants.LoggerCategory.actionEngine)
             if let urlString = chip.actionData?.url, let url = URL(string: urlString) {
                 openURL(url)
             }
             return
         }
 
-        logger.info("🎬 Executing \(actionURLs.count) action(s) for config: \(config.title, privacy: .public)")
+        AppLogger.info("🎬 Executing \(actionURLs.count) action(s) for config: \(config.title)", category: AppConstants.LoggerCategory.actionEngine)
 
         // Execute actions in sequence with delays
         executeActionsSequentially(actionURLs, index: 0)
@@ -104,7 +208,6 @@ final class ActionEngine: ObservableObject {
     private func executeActionsSequentially(_ actions: [(action: ChipActionItem, url: URL?)], index: Int) {
         guard index < actions.count else { return }
 
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
         let (action, url) = actions[index]
 
         // Apply delay if specified
@@ -114,10 +217,10 @@ final class ActionEngine: ObservableObject {
             guard let self = self else { return }
 
             if let url = url {
-                logger.info("  [\(index + 1)/\(actions.count)] \(action.name, privacy: .public): \(url.absoluteString, privacy: .public)")
+                AppLogger.info("  [\(index + 1)/\(actions.count)] \(action.name): \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
                 self.openURL(url)
             } else {
-                logger.warning("  [\(index + 1)/\(actions.count)] \(action.name, privacy: .public): No URL")
+                AppLogger.warning("  [\(index + 1)/\(actions.count)] \(action.name): No URL", category: AppConstants.LoggerCategory.actionEngine)
             }
 
             // Execute next action
@@ -141,38 +244,28 @@ final class ActionEngine: ObservableObject {
     // MARK: - URL Action
 
     private func executeURLAction(actionData: ActionPayload?, chip: Chip) {
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-        
-        print("🔗 [ActionEngine] executeURLAction called")
+        AppLogger.info("🔗 executeURLAction called", category: AppConstants.LoggerCategory.actionEngine)
         
         guard let urlString = actionData?.url else {
-            print("⚠️ [ActionEngine] No URL string found in actionData")
-            logger.warning("⚠️ No URL string found in actionData")
+            AppLogger.warning("⚠️ No URL string found in actionData", category: AppConstants.LoggerCategory.actionEngine)
             return
         }
         
-        print("🔗 [ActionEngine] URL string: \(urlString)")
-        
         guard let url = URL(string: urlString) else {
-            print("⚠️ [ActionEngine] Invalid URL string: \(urlString)")
-            logger.warning("⚠️ Invalid URL string: \(urlString, privacy: .public)")
+            AppLogger.warning("⚠️ Invalid URL string: \(urlString)", category: AppConstants.LoggerCategory.actionEngine)
             return
         }
 
-        print("🔗 [ActionEngine] Opening URL: \(url.absoluteString)")
-        print("🔗 [ActionEngine] URL scheme: \(url.scheme ?? "none")")
-        print("🔗 [ActionEngine] URL host: \(url.host ?? "none")")
-        logger.info("🔗 Opening URL: \(url.absoluteString, privacy: .public)")
-        logger.info("   URL scheme: \(url.scheme ?? "none", privacy: .public)")
-        logger.info("   URL host: \(url.host ?? "none", privacy: .public)")
+        AppLogger.info("🔗 Opening URL: \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   URL scheme: \(url.scheme ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   URL host: \(url.host ?? "none")", category: AppConstants.LoggerCategory.actionEngine)
 
         // Check if we should open in a specific app
         if let preferredApp = actionData?.preferredApp {
-            print("🔗 [ActionEngine] Preferred app: \(preferredApp)")
-            logger.info("   Preferred app: \(preferredApp, privacy: .public)")
+            AppLogger.info("   Preferred app: \(preferredApp)", category: AppConstants.LoggerCategory.actionEngine)
             openInApp(url: url, appName: preferredApp)
         } else {
-            print("🔗 [ActionEngine] No preferred app, calling openURL directly")
+            AppLogger.info("🔗 No preferred app, calling openURL directly", category: AppConstants.LoggerCategory.actionEngine)
             openURL(url)
         }
 
@@ -233,20 +326,14 @@ final class ActionEngine: ObservableObject {
         #if os(iOS)
         UIApplication.shared.open(url)
         #elseif os(macOS)
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-        
-        print("🌐 [ActionEngine] Opening URL: \(url.absoluteString)")
-        print("🌐 [ActionEngine] Scheme: \(url.scheme ?? "nil")")
-        print("🌐 [ActionEngine] Host: \(url.host ?? "nil")")
-        logger.info("🌐 Opening URL in default browser: \(url.absoluteString, privacy: .public)")
-        logger.info("   Full URL: \(url.absoluteString, privacy: .public)")
-        logger.info("   Scheme: \(url.scheme ?? "nil", privacy: .public)")
-        logger.info("   Host: \(url.host ?? "nil", privacy: .public)")
+        AppLogger.info("🌐 Opening URL in default browser: \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   Full URL: \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   Scheme: \(url.scheme ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
+        AppLogger.info("   Host: \(url.host ?? "nil")", category: AppConstants.LoggerCategory.actionEngine)
         
         // Ensure URL is valid
         guard url.scheme != nil else {
-            print("❌ [ActionEngine] Invalid URL: missing scheme")
-            logger.error("❌ Invalid URL: missing scheme")
+            AppLogger.error("❌ Invalid URL: missing scheme", category: AppConstants.LoggerCategory.actionEngine)
             return
         }
         
@@ -262,41 +349,33 @@ final class ActionEngine: ObservableObject {
         
         do {
             try task.run()
-            print("✅ [ActionEngine] Executed: /usr/bin/open \(url.absoluteString)")
-            logger.info("✅ Executed: /usr/bin/open \(url.absoluteString, privacy: .public)")
+            AppLogger.info("✅ Executed: /usr/bin/open \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
             
             // Read output asynchronously
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let output = String(data: data, encoding: .utf8), !output.isEmpty {
-                print("   [ActionEngine] Output: \(output)")
-                logger.info("   Output: \(output, privacy: .public)")
+                AppLogger.info("   Output: \(output)", category: AppConstants.LoggerCategory.actionEngine)
             }
         } catch {
-            print("❌ [ActionEngine] Failed to run /usr/bin/open: \(error.localizedDescription)")
-            logger.error("❌ Failed to run /usr/bin/open: \(error.localizedDescription, privacy: .public)")
+            AppLogger.error("❌ Failed to run /usr/bin/open: \(error.localizedDescription)", category: AppConstants.LoggerCategory.actionEngine)
             
             // Fallback to NSWorkspace
-            print("⚠️ [ActionEngine] Trying NSWorkspace fallback...")
-            logger.info("   Trying NSWorkspace fallback...")
+            AppLogger.info("   Trying NSWorkspace fallback...", category: AppConstants.LoggerCategory.actionEngine)
             let success = NSWorkspace.shared.open(url)
             if success {
-                print("✅ [ActionEngine] Opened with NSWorkspace fallback")
-                logger.info("✅ Opened with NSWorkspace fallback")
+                AppLogger.info("✅ Opened with NSWorkspace fallback", category: AppConstants.LoggerCategory.actionEngine)
             } else {
-                print("❌ [ActionEngine] NSWorkspace also failed")
-                logger.error("❌ NSWorkspace also failed")
+                AppLogger.error("❌ NSWorkspace also failed", category: AppConstants.LoggerCategory.actionEngine)
             }
         }
         #endif
     }
 
     private func openInApp(url: URL, appName: String) {
-        let logger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-        
         #if os(macOS)
         // On macOS, YouTube URLs should open in browser, not app scheme
         if appName.lowercased() == "youtube" {
-            logger.info("🔗 Opening YouTube URL in browser: \(url.absoluteString, privacy: .public)")
+            AppLogger.info("🔗 Opening YouTube URL in browser: \(url.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
             openURL(url)
             return
         }
@@ -328,19 +407,18 @@ final class ActionEngine: ObservableObject {
         #if os(iOS)
         UIApplication.shared.open(targetURL) { success in
             if !success {
-                let fallbackLogger = Logger(subsystem: "com.chips.app", category: "ActionEngine")
-                fallbackLogger.warning("⚠️ Failed to open app URL, falling back to browser")
+                AppLogger.warning("⚠️ Failed to open app URL, falling back to browser", category: AppConstants.LoggerCategory.actionEngine)
                 self.openURL(url)
             }
         }
         #elseif os(macOS)
-        logger.info("🔗 Attempting to open URL: \(targetURL.absoluteString, privacy: .public)")
+        AppLogger.info("🔗 Attempting to open URL: \(targetURL.absoluteString)", category: AppConstants.LoggerCategory.actionEngine)
         let success = NSWorkspace.shared.open(targetURL)
         if !success {
-            logger.warning("⚠️ Failed to open URL with NSWorkspace, trying direct open")
+            AppLogger.warning("⚠️ Failed to open URL with NSWorkspace, trying direct open", category: AppConstants.LoggerCategory.actionEngine)
             openURL(url)
         } else {
-            logger.info("✅ Successfully opened URL")
+            AppLogger.info("✅ Successfully opened URL", category: AppConstants.LoggerCategory.actionEngine)
         }
         #endif
     }

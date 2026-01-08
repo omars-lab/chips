@@ -1,13 +1,10 @@
 import Foundation
 import CoreData
-import os.log
 
 /// Manages chip action configurations and builds action URLs
 @MainActor
 final class ChipActionConfigurationManager: ObservableObject {
     static let shared = ChipActionConfigurationManager()
-    
-    private let logger = Logger(subsystem: "com.chips.app", category: "ChipActionConfigurationManager")
 
     private init() {}
     
@@ -21,11 +18,9 @@ final class ChipActionConfigurationManager: ObservableObject {
         }
         
         // Fallback: check if title itself is a URL
-        let title = chip.unwrappedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: title), url.scheme != nil {
-            logger.info("🔗 [ChipActionConfigurationManager] Extracted URL from title: \(title, privacy: .public)")
-            print("🔗 [ChipActionConfigurationManager] Extracted URL from title: \(title)")
-            return title
+        if let url = chip.unwrappedTitle.extractURL() {
+            AppLogger.info("🔗 [ChipActionConfigurationManager] Extracted URL from title: \(url)", category: AppConstants.LoggerCategory.actionEngine)
+            return url
         }
         
         return nil
@@ -33,64 +28,40 @@ final class ChipActionConfigurationManager: ObservableObject {
 
     /// Find matching configuration for a chip
     func findConfiguration(for chip: Chip, context: NSManagedObjectContext) -> ChipActionConfiguration? {
-        logger.info("🔍 [ChipActionConfigurationManager] Finding configuration for chip: \(chip.unwrappedTitle, privacy: .public)")
-        print("🔍 [ChipActionConfigurationManager] Finding configuration for chip: \(chip.unwrappedTitle)")
+        AppLogger.info("🔍 [ChipActionConfigurationManager] Finding configuration for chip: \(chip.unwrappedTitle)", category: AppConstants.LoggerCategory.actionEngine)
         
         let fetchRequest = ChipActionConfiguration.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "isEnabled == YES")
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \ChipActionConfiguration.priority, ascending: false)]
 
         guard let configs = try? context.fetch(fetchRequest) else {
-            logger.warning("⚠️ [ChipActionConfigurationManager] Failed to fetch configurations")
-            print("⚠️ [ChipActionConfigurationManager] Failed to fetch configurations")
+            AppLogger.warning("⚠️ [ChipActionConfigurationManager] Failed to fetch configurations", category: AppConstants.LoggerCategory.actionEngine)
             return nil
         }
         
-        logger.info("📋 [ChipActionConfigurationManager] Found \(configs.count) enabled configuration(s)")
-        print("📋 [ChipActionConfigurationManager] Found \(configs.count) enabled configuration(s)")
-        for (index, config) in configs.enumerated() {
-            let title = config.title
-            let pattern = config.urlPattern ?? "none"
-            let tags = config.tags ?? "none"
-            print("   \(index + 1). \(title) - Pattern: \(pattern), Tags: \(tags)")
-            logger.info("   \(index + 1). \(title, privacy: .public)")
-        }
+        AppLogger.info("📋 [ChipActionConfigurationManager] Found \(configs.count) enabled configuration(s)", category: AppConstants.LoggerCategory.actionEngine)
 
         // Get chip URL if available
         guard let chipURL = extractURL(from: chip) else {
-            logger.warning("⚠️ [ChipActionConfigurationManager] Chip has no URL in actionData or title")
-            print("⚠️ [ChipActionConfigurationManager] Chip has no URL in actionData or title")
-            print("   Chip title: \(chip.unwrappedTitle)")
-            print("   Chip actionType: \(chip.actionType ?? "nil")")
-            print("   Chip actionData: \(chip.actionData?.url ?? "nil")")
+            AppLogger.warning("⚠️ [ChipActionConfigurationManager] Chip has no URL in actionData or title", category: AppConstants.LoggerCategory.actionEngine)
             return nil
         }
         
-        logger.info("🔗 [ChipActionConfigurationManager] Chip URL: \(chipURL, privacy: .public)")
-        print("🔗 [ChipActionConfigurationManager] Chip URL: \(chipURL)")
+        AppLogger.info("🔗 [ChipActionConfigurationManager] Chip URL: \(chipURL)", category: AppConstants.LoggerCategory.actionEngine)
 
         // Find first matching configuration
         for config in configs {
             let title = config.title
-            let pattern = config.urlPattern ?? "none"
-            let tags = config.tags ?? "none"
-            logger.info("🔎 [ChipActionConfigurationManager] Checking config: \(title, privacy: .public)")
-            print("🔎 [ChipActionConfigurationManager] Checking config: \(title)")
-            print("   Pattern: \(pattern)")
-            print("   Tags: \(tags)")
             
             if matches(config: config, chipURL: chipURL, chip: chip) {
-                logger.info("✅ [ChipActionConfigurationManager] Match found: \(title, privacy: .public)")
-                print("✅ [ChipActionConfigurationManager] Match found: \(title)")
+                AppLogger.info("✅ [ChipActionConfigurationManager] Match found: \(title)", category: AppConstants.LoggerCategory.actionEngine)
                 return config
             } else {
-                logger.info("❌ [ChipActionConfigurationManager] No match for: \(title, privacy: .public)")
-                print("❌ [ChipActionConfigurationManager] No match for: \(title)")
+                AppLogger.info("❌ [ChipActionConfigurationManager] No match for: \(title)", category: AppConstants.LoggerCategory.actionEngine)
             }
         }
         
-        logger.info("⚠️ [ChipActionConfigurationManager] No matching configuration found")
-        print("⚠️ [ChipActionConfigurationManager] No matching configuration found")
+        AppLogger.info("⚠️ [ChipActionConfigurationManager] No matching configuration found", category: AppConstants.LoggerCategory.actionEngine)
 
         return nil
     }
@@ -98,19 +69,10 @@ final class ChipActionConfigurationManager: ObservableObject {
     private func matches(config: ChipActionConfiguration, chipURL: String, chip: Chip) -> Bool {
         // Match by URL pattern
         if let pattern = config.urlPattern, !pattern.isEmpty {
-            logger.info("🔍 [ChipActionConfigurationManager] Checking URL pattern: \(pattern, privacy: .public)")
-            print("🔍 [ChipActionConfigurationManager] Checking URL pattern: '\(pattern)' against '\(chipURL)'")
             if matchesPattern(pattern: pattern, url: chipURL) {
-                logger.info("✅ [ChipActionConfigurationManager] URL pattern matched!")
-                print("✅ [ChipActionConfigurationManager] URL pattern matched!")
+                AppLogger.info("✅ [ChipActionConfigurationManager] URL pattern matched!", category: AppConstants.LoggerCategory.actionEngine)
                 return true
-            } else {
-                logger.info("❌ [ChipActionConfigurationManager] URL pattern did not match")
-                print("❌ [ChipActionConfigurationManager] URL pattern did not match")
             }
-        } else {
-            logger.info("ℹ️ [ChipActionConfigurationManager] No URL pattern configured")
-            print("ℹ️ [ChipActionConfigurationManager] No URL pattern configured")
         }
 
         // Match by tags
@@ -118,21 +80,11 @@ final class ChipActionConfigurationManager: ObservableObject {
             let chipTags = chip.tags
             let configTagsArray = configTags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             let chipTagsLower = chipTags.map { $0.lowercased() }
-            
-            logger.info("🔍 [ChipActionConfigurationManager] Checking tags - Config: \(configTags, privacy: .public), Chip: \(chipTags.joined(separator: ", "), privacy: .public)")
-            print("🔍 [ChipActionConfigurationManager] Checking tags - Config: '\(configTags)', Chip: '\(chipTags.joined(separator: ", "))'")
 
             if configTagsArray.contains(where: { chipTagsLower.contains($0) }) {
-                logger.info("✅ [ChipActionConfigurationManager] Tag matched!")
-                print("✅ [ChipActionConfigurationManager] Tag matched!")
+                AppLogger.info("✅ [ChipActionConfigurationManager] Tag matched!", category: AppConstants.LoggerCategory.actionEngine)
                 return true
-            } else {
-                logger.info("❌ [ChipActionConfigurationManager] No tag match")
-                print("❌ [ChipActionConfigurationManager] No tag match")
             }
-        } else {
-            logger.info("ℹ️ [ChipActionConfigurationManager] No tags configured")
-            print("ℹ️ [ChipActionConfigurationManager] No tags configured")
         }
 
         return false
@@ -141,21 +93,14 @@ final class ChipActionConfigurationManager: ObservableObject {
     private func matchesPattern(pattern: String, url: String) -> Bool {
         let patternLower = pattern.lowercased()
         let urlLower = url.lowercased()
-        
-        logger.info("🔍 [ChipActionConfigurationManager] Pattern matching - Pattern: '\(patternLower)', URL: '\(urlLower)'")
-        print("🔍 [ChipActionConfigurationManager] Pattern matching - Pattern: '\(patternLower)', URL: '\(urlLower)'")
 
         // Exact match
         if patternLower == urlLower {
-            logger.info("✅ [ChipActionConfigurationManager] Exact match!")
-            print("✅ [ChipActionConfigurationManager] Exact match!")
             return true
         }
 
         // Contains match (most common use case)
         if urlLower.contains(patternLower) {
-            logger.info("✅ [ChipActionConfigurationManager] Contains match!")
-            print("✅ [ChipActionConfigurationManager] Contains match!")
             return true
         }
         
@@ -165,15 +110,11 @@ final class ChipActionConfigurationManager: ObservableObject {
             
             // Check if pattern matches the host directly
             if urlHostLower == patternLower || urlHostLower.contains(patternLower) {
-                logger.info("✅ [ChipActionConfigurationManager] Host match!")
-                print("✅ [ChipActionConfigurationManager] Host match!")
                 return true
             }
             
             // Check domain variations for common services
             if matchesDomainVariation(pattern: patternLower, urlHost: urlHostLower) {
-                logger.info("✅ [ChipActionConfigurationManager] Domain variation match!")
-                print("✅ [ChipActionConfigurationManager] Domain variation match!")
                 return true
             }
         }
@@ -182,24 +123,11 @@ final class ChipActionConfigurationManager: ObservableObject {
         if patternLower.contains("*") {
             let regexPattern = NSRegularExpression.escapedPattern(for: patternLower)
                 .replacingOccurrences(of: "\\*", with: ".*")
-            logger.info("🔍 [ChipActionConfigurationManager] Trying wildcard regex: '\(regexPattern)'")
-            print("🔍 [ChipActionConfigurationManager] Trying wildcard regex: '\(regexPattern)'")
             if let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) {
                 let range = NSRange(location: 0, length: urlLower.utf16.count)
-                let matched = regex.firstMatch(in: urlLower, options: [], range: range) != nil
-                if matched {
-                    logger.info("✅ [ChipActionConfigurationManager] Wildcard match!")
-                    print("✅ [ChipActionConfigurationManager] Wildcard match!")
-                } else {
-                    logger.info("❌ [ChipActionConfigurationManager] Wildcard did not match")
-                    print("❌ [ChipActionConfigurationManager] Wildcard did not match")
-                }
-                return matched
+                return regex.firstMatch(in: urlLower, options: [], range: range) != nil
             }
         }
-        
-        logger.info("❌ [ChipActionConfigurationManager] Pattern did not match")
-        print("❌ [ChipActionConfigurationManager] Pattern did not match")
 
         return false
     }

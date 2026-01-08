@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreData
-import os.log
 
 struct ChipActionConfigView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -25,9 +24,7 @@ struct ChipActionConfigView: View {
                     Text("Add an action to send chips to other apps like NotePlan.")
                 } actions: {
                     Button("Add Action") {
-                        let logger = Logger(subsystem: "com.chips.app", category: "ChipActionConfigView")
-                        logger.info("➕ Add Action button tapped")
-                        print("➕ [ChipActionConfigView] Add Action button tapped")
+                        AppLogger.info("➕ Add Action button tapped", category: AppConstants.LoggerCategory.app)
                         showingAddSheet = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -47,9 +44,7 @@ struct ChipActionConfigView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    let logger = Logger(subsystem: "com.chips.app", category: "ChipActionConfigView")
-                    logger.info("➕ Add Action toolbar button tapped")
-                    print("➕ [ChipActionConfigView] Add Action toolbar button tapped")
+                    AppLogger.info("➕ Add Action toolbar button tapped", category: AppConstants.LoggerCategory.app)
                     showingAddSheet = true
                 } label: {
                     Label("Add", systemImage: "plus")
@@ -151,8 +146,6 @@ struct AddActionSheet: View {
     let context: NSManagedObjectContext
 
     @State private var selectedPreset: ActionPreset?
-    
-    private let logger = Logger(subsystem: "com.chips.app", category: "AddActionSheet")
 
     var body: some View {
         NavigationStack {
@@ -175,8 +168,7 @@ struct AddActionSheet: View {
                             } else {
                                 ForEach(presets) { preset in
                                     Button {
-                                        logger.info("🎯 Preset selected: \(preset.name, privacy: .public) (id: \(preset.id, privacy: .public))")
-                                        print("🎯 [AddActionSheet] Preset selected: \(preset.name) (id: \(preset.id))")
+                                        AppLogger.info("🎯 Preset selected: \(preset.name) (id: \(preset.id))", category: AppConstants.LoggerCategory.app)
                                         selectedPreset = preset
                                     } label: {
                                         PresetRow(preset: preset)
@@ -248,8 +240,7 @@ struct AddActionSheet: View {
                         } else {
                             ForEach(presets) { preset in
                                 Button {
-                                    logger.info("🎯 Preset selected: \(preset.name, privacy: .public) (id: \(preset.id, privacy: .public))")
-                                    print("🎯 [AddActionSheet] Preset selected: \(preset.name) (id: \(preset.id))")
+                                    AppLogger.info("🎯 Preset selected: \(preset.name) (id: \(preset.id))", category: AppConstants.LoggerCategory.app)
                                     selectedPreset = preset
                                 } label: {
                                     PresetRow(preset: preset)
@@ -302,42 +293,31 @@ struct AddActionSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { 
-                        logger.info("❌ AddActionSheet cancelled")
-                        print("❌ [AddActionSheet] Cancelled")
+                        AppLogger.info("❌ AddActionSheet cancelled", category: AppConstants.LoggerCategory.app)
                         dismiss() 
                     }
                 }
             }
             .sheet(item: $selectedPreset) { preset in
                 ConfigurePresetSheet(preset: preset, context: context) {
-                    logger.info("✅ ConfigurePresetSheet completed for: \(preset.name, privacy: .public)")
-                    print("✅ [AddActionSheet] ConfigurePresetSheet completed for: \(preset.name)")
+                    AppLogger.info("✅ ConfigurePresetSheet completed for: \(preset.name)", category: AppConstants.LoggerCategory.app)
                     dismiss()
                 }
             }
             .onAppear {
-                logger.info("📱 AddActionSheet appeared")
-                print("📱 [AddActionSheet] Sheet appeared")
+                AppLogger.info("📱 AddActionSheet appeared", category: AppConstants.LoggerCategory.app)
                 let presets = ActionPreset.all
-                print("📱 [AddActionSheet] ActionPreset.all count: \(presets.count)")
                 if presets.isEmpty {
-                    print("⚠️ [AddActionSheet] WARNING: No presets found!")
-                    logger.warning("⚠️ No presets available")
+                    AppLogger.warning("⚠️ No presets available", category: AppConstants.LoggerCategory.app)
                 } else {
-                    logger.info("📋 Found \(presets.count) presets")
-                    print("📋 [AddActionSheet] Available presets:")
-                    for (index, preset) in presets.enumerated() {
-                        print("   \(index + 1). \(preset.name) (id: \(preset.id))")
-                        logger.info("   \(index + 1). \(preset.name, privacy: .public)")
-                    }
+                    AppLogger.info("📋 Found \(presets.count) presets", category: AppConstants.LoggerCategory.app)
                 }
             }
         }
     }
 
     private func createCustomConfig() {
-        logger.info("🔧 Creating custom config")
-        print("🔧 [AddActionSheet] Creating custom config")
+        AppLogger.info("🔧 Creating custom config", category: AppConstants.LoggerCategory.app)
         let config = ChipActionConfiguration(context: context)
         config.id = UUID()
         config.title = "Custom Action"
@@ -347,11 +327,9 @@ struct AddActionSheet: View {
         config.createdAt = Date()
         do {
             try context.save()
-            logger.info("✅ Custom config created successfully")
-            print("✅ [AddActionSheet] Custom config created successfully")
+            AppLogger.info("✅ Custom config created successfully", category: AppConstants.LoggerCategory.app)
         } catch {
-            logger.error("❌ Failed to save custom config: \(error.localizedDescription, privacy: .public)")
-            print("❌ [AddActionSheet] Failed to save custom config: \(error.localizedDescription)")
+            AppLogger.error("❌ Failed to save custom config: \(error.localizedDescription)", category: AppConstants.LoggerCategory.app)
         }
         dismiss()
     }

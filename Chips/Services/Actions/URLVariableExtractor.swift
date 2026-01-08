@@ -69,9 +69,29 @@ struct URLVariableExtractor {
             )
         }
 
+        // Determine the title to use
+        // If chipTitle is the same as urlString (i.e., title is just the URL),
+        // use a default title based on the source type
+        var titleToUse = chipTitle
+        let trimmedTitle = chipTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isTitleJustURL = trimmedTitle == trimmedURL || trimmedTitle.isEmpty
+        
+        if isTitleJustURL {
+            if host.contains("youtube.com") || host.contains("youtu.be") {
+                titleToUse = "Youtube Video"
+            } else if host.contains("github.com") {
+                titleToUse = "GitHub Repository"
+            } else if host.contains("twitter.com") || host.contains("x.com") {
+                titleToUse = "Twitter Post"
+            } else if host.contains("spotify.com") || host.contains("open.spotify.com") {
+                titleToUse = "Spotify Track"
+            }
+        }
+
         let variables: [String: String] = [
             "url": urlString,
-            "title": chipTitle,
+            "title": titleToUse,
             "host": host,
             "path": url.path
         ]

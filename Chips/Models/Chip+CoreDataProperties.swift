@@ -76,18 +76,40 @@ extension Chip {
         interactions?.count ?? 0
     }
 
-    /// Decoded action payload
+    /// Decoded action payload (getter and setter)
     var actionData: ActionPayload? {
-        guard let payload = actionPayload,
-              let data = payload.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(ActionPayload.self, from: data)
+        get {
+            guard let payload = actionPayload,
+                  let data = payload.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(ActionPayload.self, from: data)
+        }
+        set {
+            if let newValue = newValue,
+               let encoded = try? JSONEncoder().encode(newValue),
+               let jsonString = String(data: encoded, encoding: .utf8) {
+                actionPayload = jsonString
+            } else {
+                actionPayload = nil
+            }
+        }
     }
 
-    /// Decoded metadata
+    /// Decoded metadata (getter and setter)
     var chipMetadata: ChipMetadata? {
-        guard let meta = metadata,
-              let data = meta.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(ChipMetadata.self, from: data)
+        get {
+            guard let meta = metadata,
+                  let data = meta.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(ChipMetadata.self, from: data)
+        }
+        set {
+            if let newValue = newValue,
+               let encoded = try? JSONEncoder().encode(newValue),
+               let jsonString = String(data: encoded, encoding: .utf8) {
+                metadata = jsonString
+            } else {
+                metadata = nil
+            }
+        }
     }
 
     /// Tags extracted from metadata
@@ -116,4 +138,11 @@ struct ChipMetadata: Codable {
     var tags: [String]?
     var duration: String? // e.g., "30m"
     var repeatCount: Int?
+    var metadataTitle: String? // Title from URL metadata (e.g., YouTube video title)
+    var metadataDescription: String? // Description from URL metadata
+    var metadataImageURL: String? // Image URL from URL metadata
+    var metadataSiteName: String? // Site name from URL metadata
+    var metadataType: String? // Type from URL metadata
+    var summary: String? // Generated summary
+    var summaryGeneratedAt: String? // ISO8601 timestamp
 }

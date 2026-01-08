@@ -48,6 +48,7 @@ help:
 	@echo "  docs           - Generate documentation"
 	@echo "  screenshots    - Generate App Store screenshots"
 	@echo "  logo           - Generate app icons and in-app logo assets"
+	@echo "  logo-from-png  - Generate app icons from PNG using ImageMagick"
 	@echo "  loc            - Count lines of code"
 	@echo "  simulators     - List available simulators"
 	@echo ""
@@ -329,6 +330,70 @@ screenshots: generate
 
 logo:
 	@./scripts/generate-logo.sh
+
+logo-from-png:
+	@echo "🎨 Generating app icons from PNG using ImageMagick..."
+	@if command -v magick > /dev/null 2>&1; then \
+		IMAGEMAGICK_CMD="magick"; \
+	elif command -v convert > /dev/null 2>&1; then \
+		IMAGEMAGICK_CMD="convert"; \
+	else \
+		echo "❌ ImageMagick not found. Install with: brew install imagemagick"; \
+		exit 1; \
+	fi; \
+	SOURCE_PNG="$(if $(SOURCE),$(SOURCE),logo-assets/app-icons/chatgpt.png)"; \
+	if [ ! -f "$$SOURCE_PNG" ]; then \
+		echo "❌ Source PNG not found: $$SOURCE_PNG"; \
+		echo ""; \
+		echo "Usage:"; \
+		echo "  make logo-from-png                    # Uses default: logo-assets/app-icons/chatgpt.png"; \
+		echo "  make logo-from-png SOURCE=path/to/image.png"; \
+		exit 1; \
+	fi; \
+	echo "   Source: $$SOURCE_PNG"; \
+	echo "   Using: $$IMAGEMAGICK_CMD"; \
+	OUTPUT_DIR="logo-assets/app-icons"; \
+	mkdir -p "$$OUTPUT_DIR"; \
+	echo ""; \
+	echo "📱 Generating macOS app icons..."; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 16x16! "$$OUTPUT_DIR/icon_16x16.png" 2>/dev/null && echo "  ✅ icon_16x16.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 32x32! "$$OUTPUT_DIR/icon_16x16@2x.png" 2>/dev/null && echo "  ✅ icon_16x16@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 32x32! "$$OUTPUT_DIR/icon_32x32.png" 2>/dev/null && echo "  ✅ icon_32x32.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 64x64! "$$OUTPUT_DIR/icon_32x32@2x.png" 2>/dev/null && echo "  ✅ icon_32x32@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 128x128! "$$OUTPUT_DIR/icon_128x128.png" 2>/dev/null && echo "  ✅ icon_128x128.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 256x256! "$$OUTPUT_DIR/icon_128x128@2x.png" 2>/dev/null && echo "  ✅ icon_128x128@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 256x256! "$$OUTPUT_DIR/icon_256x256.png" 2>/dev/null && echo "  ✅ icon_256x256.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 512x512! "$$OUTPUT_DIR/icon_256x256@2x.png" 2>/dev/null && echo "  ✅ icon_256x256@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 512x512! "$$OUTPUT_DIR/icon_512x512.png" 2>/dev/null && echo "  ✅ icon_512x512.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 1024x1024! "$$OUTPUT_DIR/icon_512x512@2x.png" 2>/dev/null && echo "  ✅ icon_512x512@2x.png"; \
+	echo ""; \
+	echo "📱 Generating iOS app icon..."; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 1024x1024! "$$OUTPUT_DIR/AppIcon_1024x1024.png" 2>/dev/null && echo "  ✅ AppIcon_1024x1024.png"; \
+	echo ""; \
+	echo "🎨 Generating app logos (for UI use)..."; \
+	LOGO_DIR="logo-assets/app-logos"; \
+	mkdir -p "$$LOGO_DIR"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 80x80! "$$LOGO_DIR/ChipLogo_40x40@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_40x40@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 120x120! "$$LOGO_DIR/ChipLogo_60x60@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_60x60@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 160x160! "$$LOGO_DIR/ChipLogo_80x80@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_80x80@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 240x240! "$$LOGO_DIR/ChipLogo_120x120@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_120x120@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 360x360! "$$LOGO_DIR/ChipLogo_180x180@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_180x180@2x.png"; \
+	$$IMAGEMAGICK_CMD "$$SOURCE_PNG" -resize 480x480! "$$LOGO_DIR/ChipLogo_240x240@2x.png" 2>/dev/null && echo "  ✅ ChipLogo_240x240@2x.png"; \
+	echo ""; \
+	echo "📦 Copying icons to AppIcon.appiconset..."; \
+	APPICON_DIR="Chips/Resources/Assets.xcassets/AppIcon.appiconset"; \
+	if [ -d "$$APPICON_DIR" ]; then \
+		cp "$$OUTPUT_DIR/"icon_*.png "$$OUTPUT_DIR/"AppIcon_*.png "$$APPICON_DIR/" 2>/dev/null || true; \
+		PYTHON_SCRIPT="scripts/update-appicon-contents.py"; \
+		if [ -f "$$PYTHON_SCRIPT" ]; then \
+			python3 "$$PYTHON_SCRIPT" "$$APPICON_DIR" "$$OUTPUT_DIR" || echo "  ⚠️  Failed to update Contents.json"; \
+		fi; \
+		echo "  ✅ Icons copied to AppIcon.appiconset"; \
+	else \
+		echo "  ⚠️  AppIcon.appiconset directory not found"; \
+	fi; \
+	echo ""; \
+	echo "✅ Logo generation complete!"
 
 loc:
 	@echo "📊 Lines of code:"

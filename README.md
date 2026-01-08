@@ -2,6 +2,8 @@
 
 A markdown-powered activity tracker for iOS, iPadOS, and macOS. Turn your markdown lists into interactive chips that track your progress on recurring activities like workout videos.
 
+**GitHub**: [https://github.com/omars-lab/chips](https://github.com/omars-lab/chips)
+
 ## Features
 
 - **Markdown-Powered**: Point the app to a folder in iCloud Drive containing your markdown files
@@ -180,7 +182,7 @@ make test-coverage
 
 ## Contributing
 
-1. Fork the repository
+1. Fork the [repository](https://github.com/omars-lab/chips)
 2. Create a feature branch
 3. Run `make lint` and `make format` before committing
 4. Submit a pull request

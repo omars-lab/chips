@@ -29,11 +29,21 @@ struct ChipCardView: View {
     @ObservedObject private var actionEngine = ActionEngine.shared
     @ObservedObject private var timerManager = TimerManager.shared
 
+    // Use shared ViewModel for metadata and summary logic
+    @StateObject private var viewModel: ChipViewModel
+
     @State private var isHovered = false
     @State private var showingHistory = false
 
     private var isActiveTimer: Bool {
         timerManager.activeTimer?.chipID == chip.id
+    }
+    
+    init(chip: Chip) {
+        self.chip = chip
+        // Initialize ViewModel with chip's context or shared context
+        let context = chip.managedObjectContext ?? PersistenceController.shared.container.viewContext
+        _viewModel = StateObject(wrappedValue: ChipViewModel(chip: chip, context: context))
     }
 
     var body: some View {
@@ -41,16 +51,88 @@ struct ChipCardView: View {
             actionEngine.execute(chip: chip, context: viewContext)
         } label: {
             VStack(alignment: .leading, spacing: 12) {
-                // Header with icon and title
+                // Header with thumbnail/icon and title
                 HStack(spacing: 12) {
-                    actionIcon
-                        .font(.title2)
-                        .frame(width: 40, height: 40)
-                        .background(iconBackgroundColor.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    // Thumbnail or Action indicator
+                    if let thumbnailURL = viewModel.thumbnailURL, let url = URL(string: thumbnailURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ChipViewHelpers.actionIcon(for: chip)
+                                    .font(.title2)
+                                    .frame(width: 40, height: 40)
+                                    .background(ChipViewHelpers.iconBackgroundColor(for: chip).opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .onAppear {
+                                        print("🖼️ [ChipCardView] AsyncImage EMPTY - loading thumbnail: \(thumbnailURL)")
+                                        fflush(stdout)
+                                    }
+                            case .success(let image):
+                                ZStack(alignment: .topTrailing) {
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 40, height: 40)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .opacity(chip.isCompleted ? 0.5 : 1.0)
+                                    
+                                    if chip.isCompleted {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.green)
+                                            .background(Circle().fill(.white))
+                                            .offset(x: 4, y: -4)
+                                    }
+                                }
+                                .onAppear {
+                                    print("🖼️ [ChipCardView] ✅ AsyncImage SUCCESS - displaying thumbnail: \(thumbnailURL)")
+                                    fflush(stdout)
+                                }
+                            case .failure(let error):
+                                ChipViewHelpers.actionIcon(for: chip)
+                                    .font(.title2)
+                                    .frame(width: 40, height: 40)
+                                    .background(ChipViewHelpers.iconBackgroundColor(for: chip).opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .onAppear {
+                                        print("🖼️ [ChipCardView] ❌ AsyncImage FAILURE - failed to load '\(thumbnailURL)': \(error.localizedDescription)")
+                                        fflush(stdout)
+                                    }
+                            @unknown default:
+                                ChipViewHelpers.actionIcon(for: chip)
+                                    .font(.title2)
+                                    .frame(width: 40, height: 40)
+                                    .background(ChipViewHelpers.iconBackgroundColor(for: chip).opacity(0.15))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                    } else {
+                        // No thumbnail - show action icon with completion overlay
+                        ChipViewHelpers.actionIcon(for: chip)
+                            .font(.title2)
+                            .frame(width: 40, height: 40)
+                            .background(ChipViewHelpers.iconBackgroundColor(for: chip).opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .opacity(chip.isCompleted ? 0.5 : 1.0)
+                            .overlay(alignment: .topTrailing) {
+                                if chip.isCompleted {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.green)
+                                        .background(Circle().fill(.white))
+                                        .offset(x: 4, y: -4)
+                                }
+                            }
+                            .onAppear {
+                                let stateURL = viewModel.metadata?.imageURL ?? "nil"
+                                let chipURL = chip.chipMetadata?.metadataImageURL ?? "nil"
+                                print("🖼️ [ChipCardView] No thumbnail URL - @Published: \(stateURL), chip.chipMetadata: \(chipURL)")
+                                fflush(stdout)
+                            }
+                    }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(chip.unwrappedTitle)
+                        Text(viewModel.displayTitle)
                             .font(.headline)
                             .strikethrough(chip.isCompleted)
                             .foregroundStyle(chip.isCompleted ? .secondary : .primary)
@@ -83,6 +165,24 @@ struct ChipCardView: View {
                         }
                     }
                 }
+                
+                // Summary (if available and showing)
+                if viewModel.showingSummary, let summary = viewModel.summary ?? ChipSummaryService.shared.getSummary(for: chip) {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .padding(.top, 4)
+                } else if viewModel.isGeneratingSummary {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("Generating summary...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
 
                 // Footer with stats and timer
                 HStack {
@@ -95,7 +195,7 @@ struct ChipCardView: View {
 
                     // Duration tag if present
                     if let duration = chip.actionData?.expectedDuration {
-                        Label(formatDuration(TimeInterval(duration)), systemImage: "timer")
+                        Label(ChipViewHelpers.formatDuration(TimeInterval(duration)), systemImage: "timer")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -169,57 +269,83 @@ struct ChipCardView: View {
             Divider()
 
             Button {
-                toggleCompleted()
+                ChipViewHelpers.toggleCompleted(
+                    for: chip,
+                    in: viewContext,
+                    timerManager: timerManager,
+                    isActiveTimer: isActiveTimer
+                )
             } label: {
                 Label(
                     chip.isCompleted ? "Mark as Active" : "Mark as Complete",
                     systemImage: chip.isCompleted ? "arrow.uturn.backward" : "checkmark"
                 )
             }
+            
+            // Show metadata and summary options if chip has a URL
+            if viewModel.hasURL {
+                Divider()
+                
+                Button {
+                    Task {
+                        await viewModel.fetchAndShowMetadata()
+                    }
+                } label: {
+                    Label(
+                        viewModel.isFetchingMetadata ? "Fetching..." : "View Metadata",
+                        systemImage: "info.circle"
+                    )
+                }
+                .disabled(viewModel.isFetchingMetadata)
+                
+                Button {
+                    Task {
+                        await viewModel.generateSummary()
+                    }
+                } label: {
+                    Label(
+                        viewModel.isGeneratingSummary ? "Generating..." : (viewModel.summary != nil ? "Regenerate Summary" : "Generate Summary"),
+                        systemImage: "text.bubble"
+                    )
+                }
+                .disabled(viewModel.isGeneratingSummary)
+                
+                if viewModel.summary != nil || ChipSummaryService.shared.getSummary(for: chip) != nil {
+                    Button {
+                        viewModel.showingSummary.toggle()
+                    } label: {
+                        Label(viewModel.showingSummary ? "Hide Summary" : "Show Summary", systemImage: viewModel.showingSummary ? "eye.slash" : "eye")
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showingHistory) {
             ChipHistoryView(chip: chip)
         }
-    }
-
-    // MARK: - Action Icon
-
-    private var actionIcon: some View {
-        Group {
-            switch chip.actionType {
-            case "url":
-                if chip.actionData?.preferredApp == "youtube" {
-                    Image(systemName: "play.rectangle.fill")
-                        .foregroundStyle(.red)
-                } else {
-                    Image(systemName: "link")
-                        .foregroundStyle(.blue)
-                }
-            case "timer":
-                Image(systemName: "timer")
-                    .foregroundStyle(.orange)
-            case "app":
-                Image(systemName: "app")
-                    .foregroundStyle(.purple)
-            default:
-                Image(systemName: "square")
-                    .foregroundStyle(.gray)
+        .sheet(isPresented: $viewModel.showingMetadata) {
+            if let metadata = viewModel.metadata {
+                let urlString = chip.actionData?.url ?? chip.unwrappedTitle.extractURL() ?? ""
+                ChipMetadataView(metadata: metadata, url: urlString)
+            }
+        }
+        .onAppear {
+            viewModel.updateContext(viewContext)
+            viewModel.onAppear()
+        }
+        .onChange(of: chip.metadata) { oldValue, newValue in
+            viewModel.onMetadataChanged(oldValue: oldValue, newValue: newValue)
+        }
+        .task(id: chip.metadata) {
+            // Check for metadata updates after a delay
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if let chipImageURL = chip.chipMetadata?.metadataImageURL, viewModel.metadata?.imageURL != chipImageURL {
+                print("🔄 [ChipCardView] Task detected metadata mismatch - reloading")
+                fflush(stdout)
+                viewModel.loadMetadataFromChip()
             }
         }
     }
-
-    private var iconBackgroundColor: Color {
-        switch chip.actionType {
-        case "url":
-            return chip.actionData?.preferredApp == "youtube" ? .red : .blue
-        case "timer":
-            return .orange
-        case "app":
-            return .purple
-        default:
-            return .gray
-        }
-    }
+    
 
     private var cardBackground: Color {
         #if os(macOS)
@@ -236,39 +362,6 @@ struct ChipCardView: View {
         return .secondary.opacity(0.2)
     }
 
-    // MARK: - Actions
-
-    private func toggleCompleted() {
-        withAnimation {
-            chip.isCompleted.toggle()
-            chip.completedAt = chip.isCompleted ? Date() : nil
-
-            if chip.isCompleted {
-                let interaction = ChipInteraction(context: viewContext)
-                interaction.id = UUID()
-                interaction.chip = chip
-                interaction.timestamp = Date()
-                interaction.actionTaken = "completed"
-                interaction.deviceName = ActionEngine.deviceName
-
-                if isActiveTimer {
-                    _ = timerManager.stopTimer()
-                }
-            }
-
-            try? viewContext.save()
-        }
-    }
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        if minutes >= 60 {
-            let hours = minutes / 60
-            let mins = minutes % 60
-            return "\(hours)h\(mins > 0 ? " \(mins)m" : "")"
-        }
-        return "\(minutes)m"
-    }
 }
 
 // MARK: - Preview
