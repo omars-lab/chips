@@ -89,9 +89,13 @@ Chips/
 │
 ├── Views/                 # SwiftUI views
 │   ├── Chips/            # Chips tab
+│   │   ├── ChipRowView.swift      # Shared component
+│   │   ├── ChipCardView.swift     # Shared component
+│   │   ├── ChipListView.swift     # Shared container
+│   │   └── Platform/              # Platform-specific views (optional)
 │   ├── History/          # History tab
 │   ├── Settings/         # Settings tab
-│   └── Shared/           # Reusable components
+│   └── Shared/           # Cross-platform reusable components
 │
 └── Resources/            # Assets, Info.plist, entitlements
 ```
@@ -311,6 +315,50 @@ struct NewView: View {
 ```
 
 **Place in:** `Chips/Views/` (appropriate subdirectory)
+
+**Platform-Specific Views:**
+
+If you need platform-specific implementations:
+
+1. **Create a router view** (platform-agnostic):
+```swift
+// Chips/Views/Chips/NewView.swift
+struct NewView: View {
+    @StateObject private var viewModel = NewViewModel()
+    
+    var body: some View {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            NewView_iPad(viewModel: viewModel)
+        } else {
+            NewView_iOS(viewModel: viewModel)
+        }
+        #elseif os(macOS)
+        NewView_macOS(viewModel: viewModel)
+        #endif
+    }
+}
+```
+
+2. **Create platform-specific implementations**:
+```swift
+// Chips/Views/Chips/Platform/NewView_iOS.swift
+struct NewView_iOS: View {
+    @ObservedObject var viewModel: NewViewModel
+    
+    var body: some View {
+        // iPhone-specific implementation
+        // Use shared components like ChipRowView, ChipCardView
+    }
+}
+```
+
+3. **Reuse shared components**:
+- `ChipRowView` - Works on all platforms
+- `ChipCardView` - Works on all platforms
+- `ChipViewHelpers` - Shared helper functions
+
+See `docs/PLATFORM_SPECIFIC_VIEWS.md` for detailed patterns.
 
 ### 4. Adding Metadata Fetching for New Platform
 
@@ -699,6 +747,8 @@ make test-coverage
 
 - **GitHub**: https://github.com/omars-lab/chips
 - **Documentation**: See `docs/` directory
+  - `PLATFORM_SPECIFIC_VIEWS.md` - Platform-specific view patterns
+  - `SHARED_LOGIC.md` - Shared ViewModel and utility patterns
 - **Specification**: See `SPEC.md`
 - **XcodeGen Docs**: https://github.com/yonaskolb/XcodeGen
 

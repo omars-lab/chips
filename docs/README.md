@@ -11,6 +11,9 @@ This directory contains all documentation for the Chips app.
 
 ### Technical Documentation
 
+- **[PLATFORM_SPECIFIC_VIEWS.md](PLATFORM_SPECIFIC_VIEWS.md)** - Platform-specific views with shared components
+- **[PLATFORM_VIEWS_ANALYSIS.md](PLATFORM_VIEWS_ANALYSIS.md)** - Pros/cons analysis and recommendations
+- **[SHARED_LOGIC.md](SHARED_LOGIC.md)** - Shared ViewModel and utility patterns
 - **[APPLE_INTELLIGENCE.md](APPLE_INTELLIGENCE.md)** - Apple Intelligence integration guide
 - **[DEBUG.md](DEBUG.md)** - Debugging guide for summary feature and URL detection
 
